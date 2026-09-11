@@ -1,7 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Plus, Trash } from "phosphor-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Linking, Modal, Platform, Pressable, Text, View } from "react-native";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,6 +21,7 @@ import {
 } from "@/src/components/ui";
 import { SignaturePad } from "@/src/components/signature-pad";
 import { getForm, Item, JALUR_OPTIONS } from "@/src/config/forms";
+import { clearDraft, Draft, loadDraft, saveDraft } from "@/src/utils/draft";
 import { makeStyles, useTheme } from "@/src/theme";
 import { fonts } from "@/src/typography";
 
@@ -46,6 +47,14 @@ const newSample = (): Sample => ({
   photos: {},
 });
 
+function draftHasContent(d: Draft): boolean {
+  const headerFilled = Object.values(d.header || {}).some((v) => String(v).trim());
+  const samplesFilled = (d.samples || []).some(
+    (s: any) => s.jalur !== null || s.titik !== null || Object.keys(s.values || {}).length > 0,
+  );
+  return headerFilled || samplesFilled;
+}
+
 export default function NewInspection() {
   const styles = useStyles();
   const { colors } = useTheme();
@@ -63,6 +72,29 @@ export default function NewInspection() {
   const [sigMengetahui, setSigMengetahui] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [pending, setPending] = useState<{ sampleId: string; itemKey: string } | null>(null);
+  const [ready, setReady] = useState(false);
+  const [draftPrompt, setDraftPrompt] = useState<Draft | null>(null);
+
+  // Load any saved draft on mount.
+  useEffect(() => {
+    if (!form) return;
+    let alive = true;
+    loadDraft(form.key).then((d) => {
+      if (!alive) return;
+      if (d && draftHasContent(d)) setDraftPrompt(d);
+      else setReady(true);
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-save draft while editing (after the resume decision is made).
+  useEffect(() => {
+    if (!ready || !form) return;
+    saveDraft(form.key, { step, header, samples, sigPemeriksa, sigMengetahui, updatedAt: Date.now() });
+  }, [ready, form, step, header, samples, sigPemeriksa, sigMengetahui]);
 
   const stepLabel = useMemo(
     () => (step === "header" ? "1/3 · Data" : step === "samples" ? "2/3 · Sampel" : "3/3 · Tanda Tangan"),
@@ -77,6 +109,24 @@ export default function NewInspection() {
     );
   }
 
+  const resumeDraft = () => {
+    if (draftPrompt) {
+      setStep(draftPrompt.step);
+      setHeader(draftPrompt.header || {});
+      setSamples(draftPrompt.samples?.length ? draftPrompt.samples : [newSample()]);
+      setSigPemeriksa(draftPrompt.sigPemeriksa ?? null);
+      setSigMengetahui(draftPrompt.sigMengetahui ?? null);
+    }
+    setDraftPrompt(null);
+    setReady(true);
+  };
+
+  const startNew = async () => {
+    await clearDraft(form.key);
+    setDraftPrompt(null);
+    setReady(true);
+  };
+
   const setHeaderField = (k: string, v: string) => setHeader((h) => ({ ...h, [k]: v }));
   const updateSample = (id: string, patch: Partial<Sample>) =>
     setSamples((list) => list.map((s) => (s.id === id ? { ...s, ...patch } : s)));
@@ -90,7 +140,6 @@ export default function NewInspection() {
   const setPhoto = (id: string, key: string, p: PhotoState) =>
     setSamples((list) => list.map((s) => (s.id === id ? { ...s, photos: { ...s.photos, [key]: p } } : s)));
 
-  // ---- Photo picking ----
   const doPick = async (source: "camera" | "gallery") => {
     if (!pending) return;
     const { sampleId, itemKey } = pending;
@@ -122,7 +171,6 @@ export default function NewInspection() {
     }
   };
 
-  // ---- Navigation between steps ----
   const goSamples = () => {
     if (!header.kebun?.trim() || !header.blok?.trim()) {
       toast("Isi minimal Kebun dan Blok", "error");
@@ -155,14 +203,7 @@ export default function NewInspection() {
           Object.entries(s.photos).forEach(([k, v]) => {
             if (v.path) photos[k] = v.path;
           });
-          return {
-            jalur: s.jalur,
-            titik: s.titik,
-            values: s.values,
-            dates: s.dates,
-            keterangan: s.keterangan,
-            photos,
-          };
+          return { jalur: s.jalur, titik: s.titik, values: s.values, dates: s.dates, keterangan: s.keterangan, photos };
         });
 
       await api("/inspections", {
@@ -176,7 +217,9 @@ export default function NewInspection() {
           signature_mengetahui: mPath,
         },
       });
+      await clearDraft(form.key);
       await queryClient.invalidateQueries({ queryKey: ["inspections"] });
+      await queryClient.invalidateQueries({ queryKey: ["stats"] });
       toast("Inspeksi tersimpan", "success");
       router.replace("/dashboard");
     } catch (e: any) {
@@ -186,7 +229,6 @@ export default function NewInspection() {
     }
   };
 
-  // ---- Renderers ----
   const renderItem = (sample: Sample, item: Item) => {
     const photo = sample.photos[item.key];
     return (
@@ -247,11 +289,7 @@ export default function NewInspection() {
             {form.headerFields.map((f) => (
               <Field key={f.key} label={f.label}>
                 {f.type === "date" ? (
-                  <DateField
-                    testID={`header-${f.key}`}
-                    value={header[f.key] ?? null}
-                    onChange={(v) => setHeaderField(f.key, v)}
-                  />
+                  <DateField testID={`header-${f.key}`} value={header[f.key] ?? null} onChange={(v) => setHeaderField(f.key, v)} />
                 ) : (
                   <TextField
                     testID={`header-${f.key}`}
@@ -273,11 +311,7 @@ export default function NewInspection() {
                 <View style={styles.sampleHead}>
                   <Text style={styles.sampleTitle}>SAMPEL #{idx + 1}</Text>
                   {samples.length > 1 ? (
-                    <Pressable
-                      testID={`remove-sample-${idx}`}
-                      onPress={() => setSamples((l) => l.filter((s) => s.id !== sample.id))}
-                      hitSlop={8}
-                    >
+                    <Pressable testID={`remove-sample-${idx}`} onPress={() => setSamples((l) => l.filter((s) => s.id !== sample.id))} hitSlop={8}>
                       <Trash size={18} color={colors.error} weight="bold" />
                     </Pressable>
                   ) : null}
@@ -285,23 +319,11 @@ export default function NewInspection() {
                 <View style={styles.sampleRow}>
                   <View style={styles.half}>
                     <Text style={styles.subLabel}>JALUR SAMPEL</Text>
-                    <PickerField
-                      testID={`jalur-${idx}`}
-                      value={sample.jalur}
-                      options={JALUR_OPTIONS}
-                      placeholder="Jalur"
-                      onChange={(v) => updateSample(sample.id, { jalur: Number(v) })}
-                    />
+                    <PickerField testID={`jalur-${idx}`} value={sample.jalur} options={JALUR_OPTIONS} placeholder="Jalur" onChange={(v) => updateSample(sample.id, { jalur: Number(v) })} />
                   </View>
                   <View style={styles.half}>
                     <Text style={styles.subLabel}>TITIK SAMPEL</Text>
-                    <PickerField
-                      testID={`titik-${idx}`}
-                      value={sample.titik}
-                      options={form.titikOptions}
-                      placeholder="Titik"
-                      onChange={(v) => updateSample(sample.id, { titik: Number(v) })}
-                    />
+                    <PickerField testID={`titik-${idx}`} value={sample.titik} options={form.titikOptions} placeholder="Titik" onChange={(v) => updateSample(sample.id, { titik: Number(v) })} />
                   </View>
                 </View>
                 {form.items.map((item) => renderItem(sample, item))}
@@ -355,15 +377,26 @@ export default function NewInspection() {
         <Pressable style={styles.modalBackdrop} onPress={() => setPending(null)}>
           <View style={styles.photoSheet}>
             <Text style={styles.photoSheetTitle}>AMBIL FOTO</Text>
-            {Platform.OS !== "web" ? (
-              <Button testID="pick-camera" title="KAMERA" onPress={() => doPick("camera")} />
-            ) : null}
+            {Platform.OS !== "web" ? <Button testID="pick-camera" title="KAMERA" onPress={() => doPick("camera")} /> : null}
             <View style={{ height: 10 }} />
             <Button testID="pick-gallery" title="GALERI" variant="secondary" onPress={() => doPick("gallery")} />
             <View style={{ height: 10 }} />
             <Button testID="pick-cancel" title="BATAL" variant="outline" onPress={() => setPending(null)} />
           </View>
         </Pressable>
+      </Modal>
+
+      <Modal visible={!!draftPrompt} transparent animationType="fade">
+        <View style={styles.modalCenter}>
+          <View style={styles.draftSheet} testID="draft-prompt">
+            <Text style={styles.photoSheetTitle}>DRAFT DITEMUKAN</Text>
+            <Text style={styles.draftText}>Ada form {form.short} yang belum selesai. Lanjutkan atau mulai baru?</Text>
+            <View style={{ height: 16 }} />
+            <Button testID="draft-resume" title="LANJUTKAN DRAFT" onPress={resumeDraft} />
+            <View style={{ height: 10 }} />
+            <Button testID="draft-new" title="MULAI BARU" variant="outline" onPress={startNew} />
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -382,15 +415,12 @@ const useStyles = makeStyles((colors) => ({
   sampleTitle: { color: colors.onSurface, fontFamily: fonts.display, fontSize: 15 },
   sampleRow: { flexDirection: "row", gap: 12 },
   half: { flex: 1 },
-  footer: {
-    padding: 12,
-    paddingTop: 12,
-    backgroundColor: colors.surface,
-    borderTopWidth: 2,
-    borderTopColor: colors.borderStrong,
-  },
+  footer: { padding: 12, paddingTop: 12, backgroundColor: colors.surface, borderTopWidth: 2, borderTopColor: colors.borderStrong },
   footerRow: { flexDirection: "row", gap: 10 },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
+  modalCenter: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 24 },
   photoSheet: { backgroundColor: colors.surface, borderTopWidth: 2, borderTopColor: colors.borderStrong, padding: 20, paddingBottom: 32 },
   photoSheetTitle: { color: colors.onSurface, fontFamily: fonts.display, fontSize: 16, marginBottom: 16 },
+  draftSheet: { backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong, padding: 20 },
+  draftText: { color: colors.onSurfaceSecondary, fontFamily: fonts.body, fontSize: 13, lineHeight: 20 },
 }));

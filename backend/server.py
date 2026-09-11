@@ -184,6 +184,20 @@ def public_user(u: dict) -> UserResponse:
     return UserResponse(id=str(u["_id"]), email=u["email"], name=u.get("name", ""))
 
 
+def compute_score(doc: dict) -> dict:
+    """Percent of 'Standar' answers over all Standar/Tidak Standart items."""
+    total = 0
+    standar = 0
+    for s in doc.get("samples", []):
+        for v in s.get("values", {}).values():
+            if v in ("Standar", "Tidak Standart"):
+                total += 1
+                if v == "Standar":
+                    standar += 1
+    percent = round(standar / total * 100) if total else None
+    return {"standar": standar, "total": total, "percent": percent}
+
+
 def serialize_inspection(doc: dict) -> dict:
     return {
         "id": str(doc["_id"]),
@@ -196,6 +210,7 @@ def serialize_inspection(doc: dict) -> dict:
         "user_email": doc.get("user_email"),
         "user_name": doc.get("user_name"),
         "created_at": doc.get("created_at"),
+        "score": compute_score(doc),
     }
 
 
@@ -329,6 +344,35 @@ async def list_inspections(
     return [serialize_inspection(d) for d in docs]
 
 
+@api_router.get("/stats")
+async def stats(user: Annotated[dict, Depends(current_user)]):
+    docs = await db.inspections.find({"user_id": str(user["_id"]), "deleted_at": None}).to_list(1000)
+    groups: Dict[str, Dict[str, Any]] = {}
+    overall_standar = 0
+    overall_total = 0
+    for d in docs:
+        header = d.get("header", {})
+        estate = (header.get("estate") or header.get("kebun") or "Lainnya").strip() or "Lainnya"
+        sc = compute_score(d)
+        overall_standar += sc["standar"]
+        overall_total += sc["total"]
+        g = groups.setdefault(estate, {"estate": estate, "inspections": 0, "standar": 0, "total": 0, "samples": 0})
+        g["inspections"] += 1
+        g["standar"] += sc["standar"]
+        g["total"] += sc["total"]
+        g["samples"] += len(d.get("samples", []))
+    estates = []
+    for g in groups.values():
+        g["percent"] = round(g["standar"] / g["total"] * 100) if g["total"] else None
+        estates.append(g)
+    estates.sort(key=lambda x: x["inspections"], reverse=True)
+    return {
+        "total_inspections": len(docs),
+        "overall_percent": round(overall_standar / overall_total * 100) if overall_total else None,
+        "estates": estates,
+    }
+
+
 async def _get_owned_inspection(inspection_id: str, user: dict) -> dict:
     if not ObjectId.is_valid(inspection_id):
         raise HTTPException(status_code=404, detail="Inspeksi tidak ditemukan")
@@ -454,6 +498,13 @@ def build_pdf(doc: dict) -> bytes:
     green = colors.HexColor("#15803D")
     story: List[Any] = []
     story.append(Paragraph(doc.get("form_title", ""), title_style))
+    story.append(Spacer(1, 4))
+    sc = compute_score(doc)
+    if sc["percent"] is not None:
+        story.append(Paragraph(
+            f"Skor Kualitas: <b>{sc['percent']}% Standar</b> ({sc['standar']}/{sc['total']} item)",
+            ParagraphStyle("sc", parent=styles["Normal"], fontSize=10, textColor=green),
+        ))
     story.append(Spacer(1, 8))
 
     header = doc.get("header", {})
@@ -490,6 +541,44 @@ def build_pdf(doc: dict) -> bytes:
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ]))
         story.append(st)
+
+    story.append(Spacer(1, 16))
+
+    # Photo appendix — embed each item photo as evidence
+    from reportlab.lib.utils import ImageReader
+
+    photo_cells: List[Any] = []
+    for s in doc.get("samples", []):
+        photos = s.get("photos", {}) or {}
+        for item_key, path in photos.items():
+            img_bytes = _fetch_image_bytes(path)
+            if not img_bytes:
+                continue
+            try:
+                iw, ih = ImageReader(io.BytesIO(img_bytes)).getSize()
+                w = 50 * mm
+                h = w * (ih / iw) if iw else 50 * mm
+                if h > 60 * mm:
+                    h = 60 * mm
+                caption = f"J{s.get('jalur','')}·T{s.get('titik','')} — {item_key.replace('_', ' ').title()}"
+                photo_cells.append([RLImage(io.BytesIO(img_bytes), width=w, height=h), Paragraph(caption, small)])
+            except Exception:
+                continue
+
+    if photo_cells:
+        story.append(Paragraph("LAMPIRAN FOTO PEMERIKSAAN", ParagraphStyle("ph", parent=styles["Heading4"])))
+        story.append(Spacer(1, 6))
+        rows = [photo_cells[i:i + 3] for i in range(0, len(photo_cells), 3)]
+        for r in rows:
+            while len(r) < 3:
+                r.append("")
+            pt = Table([r], colWidths=[55 * mm, 55 * mm, 55 * mm])
+            pt.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+                ("LEFTPADDING", (0, 0), (-1, -1), 2),
+            ]))
+            story.append(pt)
 
     story.append(Spacer(1, 20))
 

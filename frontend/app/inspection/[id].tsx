@@ -35,6 +35,7 @@ type Inspection = {
   signature_mengetahui: string | null;
   user_name: string;
   created_at: string;
+  score: { standar: number; total: number; percent: number | null };
 };
 
 export default function InspectionDetail() {
@@ -100,6 +101,22 @@ export default function InspectionDetail() {
         <ActivityIndicator style={{ marginTop: 40 }} color={colors.brandPrimary} />
       ) : (
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 }]}>
+          {data.score?.percent !== null && data.score?.percent !== undefined ? (
+            <View
+              testID="detail-score"
+              style={[
+                styles.scoreBanner,
+                {
+                  backgroundColor:
+                    data.score.percent >= 80 ? colors.success : data.score.percent >= 50 ? colors.warning : colors.error,
+                },
+              ]}
+            >
+              <Text style={styles.scoreBig}>{data.score.percent}%</Text>
+              <Text style={styles.scoreLabel}>STANDAR ({data.score.standar}/{data.score.total} ITEM)</Text>
+            </View>
+          ) : null}
+
           <Text style={styles.sectionLabel}>DATA PEMERIKSAAN</Text>
           <View style={styles.metaBox}>
             {Object.entries(data.header).map(([k, v]) => (
@@ -196,6 +213,9 @@ function ExportBtn({ icon, label, onPress, disabled, testID }: { icon: React.Rea
 const useStyles = makeStyles((colors) => ({
   root: { flex: 1, backgroundColor: colors.surface },
   content: { padding: 16 },
+  scoreBanner: { padding: 16, borderWidth: 2, borderColor: colors.borderStrong, marginBottom: 20, flexDirection: "row", alignItems: "baseline", gap: 10 },
+  scoreBig: { color: "#FFFFFF", fontFamily: fonts.display, fontSize: 34 },
+  scoreLabel: { color: "#FFFFFF", fontFamily: fonts.bodyBold, fontSize: 11, letterSpacing: 0.5 },
   sectionLabel: { color: colors.onSurfaceTertiary, fontFamily: fonts.bodyBold, fontSize: 11, letterSpacing: 1, marginBottom: 10 },
   metaBox: { borderWidth: 2, borderColor: colors.borderStrong },
   metaRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: colors.divider },
