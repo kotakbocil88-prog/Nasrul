@@ -390,21 +390,30 @@ def build_labels_pdf(docs) -> io.BytesIO:
         rowi = pos // cols
         cx = margin + col * cell_w
         cy = ph - margin - (rowi + 1) * cell_h
-        c.setStrokeColor(colors.HexColor("#CBD5E1"))
-        c.setLineWidth(0.5)
-        c.roundRect(cx + 3, cy + 3, cell_w - 6, cell_h - 6, 4, stroke=1, fill=0)
-        qr_size = min(cell_w, cell_h) - 26 * mm
-        qr_x = cx + (cell_w - qr_size) / 2
-        qr_y = cy + cell_h - qr_size - 8 * mm
+        # Outer border box (solid, seperti contoh label)
+        bx, by = cx + 3, cy + 3
+        bw, bh = cell_w - 6, cell_h - 6
+        c.setStrokeColor(colors.HexColor("#111827"))
+        c.setLineWidth(1)
+        c.rect(bx, by, bw, bh, stroke=1, fill=0)
+        # Area teks di bawah (2 baris) dipisahkan garis horizontal
+        text_area_h = 12 * mm
+        divider_y = by + text_area_h
+        c.setLineWidth(0.8)
+        c.line(bx, divider_y, bx + bw, divider_y)
+        # QR di area atas
+        qr_size = min(bw - 8 * mm, bh - text_area_h - 8 * mm)
+        qr_x = bx + (bw - qr_size) / 2
+        qr_y = divider_y + ((bh - text_area_h) - qr_size) / 2
         _draw_qr(c, build_payload(d), qr_x, qr_y, qr_size)
-        c.setFillColor(colors.HexColor("#0F291E"))
+        # Teks keterangan
+        c.setFillColor(colors.HexColor("#111827"))
+        line1 = f"{d.get('kebun','')} {d.get('blok','')} {d.get('code_lsu','')}".strip()
+        line2 = f"{fmt_num(d.get('koord_x'))} {fmt_num(d.get('koord_y'))}".strip()
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(bx + bw / 2, by + text_area_h - 5 * mm, line1[:40])
         c.setFont("Helvetica-Bold", 8)
-        line1 = f"{d.get('kebun','')} / {d.get('afdeling','')} / Blok {d.get('blok','')} / {d.get('code_lsu','')}"
-        line2 = f"X: {d.get('koord_x','')}  Y: {d.get('koord_y','')}   ID: {d.get('id_actual','')}"
-        c.drawCentredString(cx + cell_w / 2, cy + 14, line1[:52])
-        c.setFont("Helvetica", 7)
-        c.setFillColor(colors.HexColor("#4B5563"))
-        c.drawCentredString(cx + cell_w / 2, cy + 5, line2[:52])
+        c.drawCentredString(bx + bw / 2, by + 3 * mm, line2[:40])
     if not docs:
         c.setFont("Helvetica", 12)
         c.drawCentredString(pw / 2, ph / 2, "Tidak ada data")

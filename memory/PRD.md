@@ -33,6 +33,8 @@ Kelola data: Kebun (teks), Afdeling (teks), Blok (teks), Code LSU (teks), Koord_
 - Rebrand: nama aplikasi "Kebun LSU" -> "DATA EPCS TAGGING" (Dashboard header + Login desktop/mobile)
 - Id Actual bukan lagi auto-increment. Sekarang = gabungan Kebun + Blok + Code LSU + Koord_X + Koord_Y (tanpa Afdeling, tanpa pemisah). Koordinat pakai koma desimal. Contoh: KSL+OA11+TS01+110,400113+0,654521 = "KSLOA11TS01110,4001130,654521". Dihitung dinamis di backend serialize()/_fetch_docs(); RecordDialog menampilkan preview Id Actual live. Backend tested 9/9 pass.
 - DECIDED (2025-07 v2): Afdeling IKUT dalam Id Actual (setelah Kebun) -> Kebun+Afdeling+Blok+CodeLSU+X+Y. QR content = Id Actual persis. Ekspor Excel (.xlsx) ditambah (kolom Id Actual + semua kolom), all/selected. Pagination tabel sudah ada. Backend tested 11/11 pass.
+- Rebrand (2025-07 v3): "DATA EPCS TAGGING" -> "DATA EQMS TAGGING" (Login desktop/mobile + Dashboard header).
+- Label PDF (build_labels_pdf) diubah agar sesuai contoh baru: kotak berbingkai solid + garis pembatas, baris1 tebal = "{Kebun} {Blok} {Code_LSU}" (spasi), baris2 tebal = "{Koord_X} {Koord_Y}" koma desimal. Tanpa Afdeling/ID di label. Verified via standalone gen (valid %PDF).
 - P1: Pagination / row-limit switcher for large datasets
 - P1: Coordinate map visualizer (Koord X vs Y grid)
 - P2: Brute-force lockout, Mongo aggregation for stats, lifespan handlers
