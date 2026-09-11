@@ -156,11 +156,14 @@ function payloadOf(r) {
   );
 }
 
-// Status tagging: dianggap "sudah di-tagging" jika Koord X & Koord Y terisi
+// Status tagging: dianggap "sudah di-tagging" jika Koord X & Koord Y terisi dan bukan 0
 function hasCoord(v) {
   if (v === null || v === undefined) return false;
   const s = String(v).trim();
-  return s !== "";
+  if (s === "") return false;
+  const n = parseFloat(s.replace(",", "."));
+  if (Number.isFinite(n) && n === 0) return false; // nilai 0 dianggap belum di-tagging
+  return true;
 }
 function isTagged(r) {
   return hasCoord(r.koord_x) && hasCoord(r.koord_y);
@@ -197,6 +200,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [kebunFilter, setKebunFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all"); // all | tagged | untagged
   const [recordOpen, setRecordOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -234,7 +238,7 @@ export default function Dashboard() {
     [records]
   );
 
-  const filtered = useMemo(() => {
+  const baseFiltered = useMemo(() => {
     const q = search.toLowerCase().trim();
     return records.filter((r) => {
       const matchQ =
@@ -244,6 +248,18 @@ export default function Dashboard() {
       return matchQ && matchK;
     });
   }, [records, search, kebunFilter]);
+
+  const taggingStats = useMemo(() => {
+    let tagged = 0;
+    for (const r of baseFiltered) if (isTagged(r)) tagged += 1;
+    return { tagged, untagged: baseFiltered.length - tagged, total: baseFiltered.length };
+  }, [baseFiltered]);
+
+  const filtered = useMemo(() => {
+    if (statusFilter === "tagged") return baseFiltered.filter((r) => isTagged(r));
+    if (statusFilter === "untagged") return baseFiltered.filter((r) => !isTagged(r));
+    return baseFiltered;
+  }, [baseFiltered, statusFilter]);
 
   const breakdown = useMemo(() => {
     const map = {};
@@ -269,7 +285,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, kebunFilter, pageSize]);
+  }, [search, kebunFilter, statusFilter, pageSize]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -475,6 +491,75 @@ export default function Dashboard() {
           <StatCard icon={QrCode} label="Code LSU" value={stats.total_lsu ?? 0} accent="#F59E0B" />
         </div>
 
+        {/* Ringkasan Status Tagging */}
+        <div className="mb-8" data-testid="tagging-summary-section">
+          <div className="bg-card rounded-2xl border p-4 sm:p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+                <MapPin className="w-4 h-4 text-[#10B981]" />
+              </div>
+              <div>
+                <h3 className="font-heading font-bold text-sm text-[#0B1D15] leading-none">Status Tagging</h3>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {taggingStats.total.toLocaleString("id-ID")} lokasi · klik untuk memfilter
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <button
+                type="button"
+                data-testid="summary-tagged"
+                onClick={() => setStatusFilter(statusFilter === "tagged" ? "all" : "tagged")}
+                className={`text-left rounded-xl border p-4 transition-all hover:shadow-md ${
+                  statusFilter === "tagged"
+                    ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-200"
+                    : "border-emerald-100 bg-white hover:bg-emerald-50/50"
+                }`}
+              >
+                <div className="flex items-center gap-2 text-emerald-700">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span className="text-xs font-semibold uppercase tracking-wide">Sudah di-tagging</span>
+                </div>
+                <p className="font-heading text-3xl font-extrabold text-[#0B1D15] mt-2 leading-none">
+                  {taggingStats.tagged.toLocaleString("id-ID")}
+                </p>
+              </button>
+              <button
+                type="button"
+                data-testid="summary-untagged"
+                onClick={() => setStatusFilter(statusFilter === "untagged" ? "all" : "untagged")}
+                className={`text-left rounded-xl border p-4 transition-all hover:shadow-md ${
+                  statusFilter === "untagged"
+                    ? "border-amber-500 bg-amber-50 ring-2 ring-amber-200"
+                    : "border-amber-100 bg-white hover:bg-amber-50/50"
+                }`}
+              >
+                <div className="flex items-center gap-2 text-amber-700">
+                  <AlertCircle className="w-4 h-4" />
+                  <span className="text-xs font-semibold uppercase tracking-wide">Belum di-tagging</span>
+                </div>
+                <p className="font-heading text-3xl font-extrabold text-[#0B1D15] mt-2 leading-none">
+                  {taggingStats.untagged.toLocaleString("id-ID")}
+                </p>
+              </button>
+            </div>
+            <div className="mt-4 h-2.5 w-full rounded-full bg-amber-100 overflow-hidden flex">
+              <div
+                className="h-full bg-emerald-500 transition-all"
+                style={{
+                  width: `${taggingStats.total ? (taggingStats.tagged / taggingStats.total) * 100 : 0}%`,
+                }}
+                title={`${taggingStats.tagged} sudah di-tagging`}
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-2">
+              {taggingStats.total
+                ? `${Math.round((taggingStats.tagged / taggingStats.total) * 100)}% lokasi sudah di-tagging`
+                : "Belum ada data"}
+            </p>
+          </div>
+        </div>
+
         {/* Ringkasan per Kebun & Afdeling */}
         <div className="mb-8" data-testid="kebun-breakdown-section">
           <div className="flex items-center justify-between mb-3">
@@ -558,6 +643,38 @@ export default function Dashboard() {
                 ))}
               </SelectContent>
             </Select>
+            <div className="flex rounded-lg border overflow-hidden h-10" data-testid="status-filter">
+              <button
+                type="button"
+                data-testid="status-filter-all"
+                onClick={() => setStatusFilter("all")}
+                className={`px-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                  statusFilter === "all" ? "bg-[#1B4D3E] text-white" : "bg-white text-[#1B4D3E] hover:bg-muted"
+                }`}
+              >
+                Semua
+              </button>
+              <button
+                type="button"
+                data-testid="status-filter-tagged"
+                onClick={() => setStatusFilter("tagged")}
+                className={`px-3 text-sm font-medium border-l transition-colors whitespace-nowrap ${
+                  statusFilter === "tagged" ? "bg-emerald-600 text-white" : "bg-white text-emerald-700 hover:bg-emerald-50"
+                }`}
+              >
+                Sudah
+              </button>
+              <button
+                type="button"
+                data-testid="status-filter-untagged"
+                onClick={() => setStatusFilter("untagged")}
+                className={`px-3 text-sm font-medium border-l transition-colors whitespace-nowrap ${
+                  statusFilter === "untagged" ? "bg-amber-500 text-white" : "bg-white text-amber-700 hover:bg-amber-50"
+                }`}
+              >
+                Belum
+              </button>
+            </div>
             <div className="flex flex-wrap gap-2">
               <Button
                 data-testid="add-record-button"

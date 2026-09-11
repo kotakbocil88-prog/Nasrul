@@ -2,13 +2,23 @@ import { useEffect, useMemo } from "react";
 import { MapContainer, TileLayer, LayersControl, CircleMarker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
+function coordFilled(raw) {
+  if (raw === "") return false;
+  const n = parseFloat(raw.replace(",", "."));
+  if (Number.isFinite(n) && n === 0) return false; // nilai 0 dianggap belum di-tagging
+  return true;
+}
+
 // Konvensi: Koord_X = Longitude (bujur), Koord_Y = Latitude (lintang)
 function toPoints(records) {
   return (records || [])
     .map((r) => {
-      const lat = parseFloat(String(r.koord_y).replace(",", "."));
-      const lng = parseFloat(String(r.koord_x).replace(",", "."));
-      return { ...r, lat, lng };
+      const rawX = r.koord_x === null || r.koord_x === undefined ? "" : String(r.koord_x).trim();
+      const rawY = r.koord_y === null || r.koord_y === undefined ? "" : String(r.koord_y).trim();
+      const lat = parseFloat(rawY.replace(",", "."));
+      const lng = parseFloat(rawX.replace(",", "."));
+      const tagged = coordFilled(rawX) && coordFilled(rawY);
+      return { ...r, lat, lng, tagged };
     })
     .filter(
       (p) =>
@@ -83,29 +93,46 @@ export default function CoordinateMap({ records, height = 420, interactive = tru
           </LayersControl.BaseLayer>
         </LayersControl>
         <FitBounds points={points} />
-        {points.map((p) => (
-          <CircleMarker
-            key={p._id || `${p.lat}-${p.lng}`}
-            center={[p.lat, p.lng]}
-            radius={7}
-            pathOptions={{ color: "#0F291E", weight: 2, fillColor: "#84CC16", fillOpacity: 0.9 }}
-          >
-            <Popup>
-              <div className="text-xs">
-                <div className="font-bold text-[#0F291E]">
-                  {p.kebun} {p.blok} {p.code_lsu}
+        {points.map((p) => {
+          const color = p.tagged ? "#0F291E" : "#B45309";
+          const fill = p.tagged ? "#84CC16" : "#FCD34D";
+          return (
+            <CircleMarker
+              key={p._id || `${p.lat}-${p.lng}`}
+              center={[p.lat, p.lng]}
+              radius={7}
+              pathOptions={{ color, weight: 2, fillColor: fill, fillOpacity: 0.9 }}
+            >
+              <Popup>
+                <div className="text-xs">
+                  <div className="font-bold text-[#0F291E]">
+                    {p.kebun} {p.blok} {p.code_lsu}
+                  </div>
+                  <div className="text-gray-600 mt-0.5 font-mono">
+                    Lat (Y): {p.koord_y} · Lng (X): {p.koord_x}
+                  </div>
+                  <div className={`mt-1 font-semibold ${p.tagged ? "text-emerald-700" : "text-amber-700"}`}>
+                    {p.tagged ? "Sudah di-tagging" : "Belum di-tagging"}
+                  </div>
+                  {p.id_actual && (
+                    <div className="text-gray-500 mt-0.5 font-mono break-all">ID: {p.id_actual}</div>
+                  )}
                 </div>
-                <div className="text-gray-600 mt-0.5 font-mono">
-                  Lat (Y): {p.koord_y} · Lng (X): {p.koord_x}
-                </div>
-                {p.id_actual && (
-                  <div className="text-gray-500 mt-0.5 font-mono break-all">ID: {p.id_actual}</div>
-                )}
-              </div>
-            </Popup>
-          </CircleMarker>
-        ))}
+              </Popup>
+            </CircleMarker>
+          );
+        })}
       </MapContainer>
+      <div className="absolute bottom-2 left-2 z-[400] bg-white/90 backdrop-blur-sm rounded-lg border shadow-sm px-3 py-2 text-[11px] space-y-1 pointer-events-none">
+        <div className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-full border-2" style={{ borderColor: "#0F291E", background: "#84CC16" }} />
+          <span className="text-gray-700 font-medium">Sudah di-tagging</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-full border-2" style={{ borderColor: "#B45309", background: "#FCD34D" }} />
+          <span className="text-gray-700 font-medium">Belum di-tagging</span>
+        </div>
+      </div>
     </div>
   );
 }

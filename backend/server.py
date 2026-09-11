@@ -444,6 +444,22 @@ def build_labels_pdf(docs, size: str = "medium") -> io.BytesIO:
     return buf
 
 
+def _coord_filled(v) -> bool:
+    s = str(v if v is not None else "").strip()
+    if s == "":
+        return False
+    try:
+        if float(s.replace(",", ".")) == 0:
+            return False  # nilai 0 dianggap belum di-tagging
+    except ValueError:
+        pass
+    return True
+
+
+def _is_tagged(d) -> bool:
+    return _coord_filled(d.get("koord_x")) and _coord_filled(d.get("koord_y"))
+
+
 def build_table_pdf(docs) -> io.BytesIO:
     buf = io.BytesIO()
     c = pdf_canvas.Canvas(buf, pagesize=A4)
@@ -478,6 +494,16 @@ def build_table_pdf(docs) -> io.BytesIO:
         c.drawString(tx, y - 15 * mm, line1[:70])
         c.setFillColor(colors.HexColor("#4B5563"))
         c.drawString(tx, y - 21 * mm, line2[:70])
+        # Keterangan status tagging
+        tagged = _is_tagged(d)
+        status_text = "Sudah di-tagging" if tagged else "Belum di-tagging"
+        status_color = colors.HexColor("#047857") if tagged else colors.HexColor("#B45309")
+        c.setFont("Helvetica-Bold", 9)
+        c.setFillColor(colors.HexColor("#0F291E"))
+        c.drawString(tx, y - 27 * mm, "Keterangan: ")
+        kw = c.stringWidth("Keterangan: ", "Helvetica-Bold", 9)
+        c.setFillColor(status_color)
+        c.drawString(tx + kw, y - 27 * mm, status_text)
         y -= row_h + 3 * mm
     if not docs:
         c.setFont("Helvetica", 12)
