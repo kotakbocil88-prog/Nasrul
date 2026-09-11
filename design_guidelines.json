@@ -1,0 +1,119 @@
+{
+  "project_title": "Sistem Informasi & Label QR Perkebunan (Kebun LSU Management)",
+  "app_type": "dashboard / saas_app",
+  "language": "Indonesian (Bahasa Indonesia)",
+  "design_archetype": "ORGANIC & EARTHY / TACTICAL AGTECH PRECISION",
+  "theme_summary": "High-density plantation management system combining deep forest green structural tones, organic bone-white surfaces, crisp high-contrast emerald borders, and tactical lime/gold badges for field precision and scanability.",
+  "colors": {
+    "primary": {
+      "deep_forest": "#0F291E",
+      "plantation_green": "#1B4D3E",
+      "accent_emerald": "#10B981",
+      "field_lime": "#84CC16"
+    },
+    "secondary": {
+      "earth_sand": "#F7F8F5",
+      "card_bg_light": "#FFFFFF",
+      "surface_muted": "#EEF2ED",
+      "amber_warning": "#F59E0B"
+    },
+    "text": {
+      "heading_dark": "#0B1D15",
+      "body_muted": "#4B5563",
+      "dark_bg_text": "#F3F4F6",
+      "light_muted": "#6B7280"
+    },
+    "borders": {
+      "subtle": "#E2E8F0",
+      "accent": "#34D399",
+      "dark_border": "#274E3E"
+    }
+  },
+  "typography": {
+    "heading_font": "Plus Jakarta Sans, sans-serif",
+    "body_font": "IBM Plex Sans, sans-serif",
+    "mono_font": "JetBrains Mono, monospace",
+    "scale": {
+      "h1": "text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight",
+      "h2": "text-xl sm:text-2xl font-bold tracking-tight",
+      "h3": "text-lg sm:text-xl font-semibold",
+      "h4_card": "text-base font-semibold",
+      "body": "text-sm sm:text-base leading-relaxed",
+      "table_data": "text-xs sm:text-sm font-medium",
+      "label": "text-xs font-semibold uppercase tracking-wider"
+    }
+  },
+  "layout_and_spacing": {
+    "dashboard_grid": "grid-cols-1 md:grid-cols-4 gap-4 sm:gap-6",
+    "sidebar_width": "w-64 min-h-screen bg-[#0F291E] text-white",
+    "container_padding": "p-4 sm:p-6 lg:p-8",
+    "card_padding": "p-5 sm:p-6",
+    "density_mode": "Support toggle between Compact (py-2 px-3) and Standard (py-3.5 px-4) for data table rows"
+  },
+  "key_features_and_components": {
+    "login_screen": {
+      "description": "Clean split screen with high-res aerial palm plantation image on left and dark forest themed JWT login card on right",
+      "elements": ["Email/Username Input", "Password Input", "Ingat Saya checkbox", "Tombol Masuk (Login)", "Demo Credentials Quick Fill"]
+    },
+    "stats_overview_cards": {
+      "cards": [
+        "Total Kebun & Afdeling",
+        "Total Blok Perkebunan",
+        "Jumlah Code LSU Unik",
+        "Total QR Code Siap Cetak"
+      ]
+    },
+    "plantation_data_table": {
+      "columns": [
+        "Kebun",
+        "Afdeling",
+        "Blok",
+        "Code LSU",
+        "Koord X",
+        "Koord Y",
+        "Id Actual",
+        "QR Code (Preview Mini)",
+        "Aksi (Edit / Hapus / Download Single QR)"
+      ],
+      "controls": [
+        "Pencarian global (Search across Kebun, Afdeling, Blok, Code LSU)",
+        "Filter per Kebun & Afdeling",
+        "Tombol Impor Excel (.xlsx)",
+        "Tombol Tambah Data Manual",
+        "Tombol Cetak PDF Label QR (Grid Layout)",
+        "Tombol Ekspor Tabel PDF (Full Table + QR + 2-Line Caption)",
+        "Pagination & Row Limit Switcher"
+      ]
+    },
+    "qr_code_generator": {
+      "payload_format": "JSON or Structured String: Kebun: {kebun} | Afdeling: {afdeling} | Blok: {blok} | LSU: {code_lsu} | X: {koord_x} | Y: {koord_y}",
+      "preview": "Instant visual QR canvas rendering with download PNG button"
+    },
+    "excel_bulk_import_modal": {
+      "dropzone": "Drag and drop area for .xlsx or .xls files",
+      "template_download": "Provide downloadable template Excel with columns [Kebun, Afdeling, Blok, Code_LSU, Koord_X, Koord_Y, Id_Actual]",
+      "preview_table": "Validation table displaying imported rows before confirming save to backend"
+    },
+    "pdf_export_modes": {
+      "mode_1_labels": "PDF Label Stiker Field QR Cards (3x5 grid layout per page, displaying QR + Kebun/Blok/LSU label)",
+      "mode_2_full_table": "Full Data Table Report PDF containing tabular data, embedded QR code thumbnail per row, and two-line caption below each QR"
+    },
+    "coordinates_map_visualizer": {
+      "description": "Interactive visual plot showing Koord_X vs Koord_Y block layout grid for spatial spatial inspection"
+    }
+  },
+  "image_urls": {
+    "login_hero": "https://images.unsplash.com/photo-1465927579036-6e6a6aa87c09?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "plantation_aerial": "https://images.unsplash.com/photo-1540843650088-e05e97f1855b?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "palm_field_thumb": "https://images.unsplash.com/photo-1583479542309-43caef27a106?crop=entropy&cs=srgb&fm=jpg&q=85"
+  },
+  "general_ui_ux_guidelines": [
+    "Always use test-id attributes (data-testid) on every interactive component, modal, input, button, and table row.",
+    "Do not use transparent background on header, sticky nav, or dialog overlays. Use high contrast glassmorphism with backdrop-blur-md bg-[#0F291E]/95 or solid white with clear borders.",
+    "Use Indonesian field terminology accurately: Kebun, Afdeling, Blok, Code LSU, Koordinat X/Y, Id Actual.",
+    "Hover states must always explicitly set text colors to guarantee readability.",
+    "Ensure PDF export functions cleanly handle both single-page stickers and multi-page tabular reports without memory locks.",
+    "Use Toast notifications (sonner) for Excel upload feedback, CRUD confirmations, and PDF export status."
+  ],
+  "testing_convention": "All elements must have kebab-case data-testid, e.g. data-testid='input-search-kebun', data-testid='button-export-pdf-labels', data-testid='table-row-plantation-item'."
+}
