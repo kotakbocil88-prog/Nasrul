@@ -45,8 +45,8 @@ export default function Login() {
   };
 
   const fillDemo = () => {
-    setEmail("admin@kebun.id");
-    setPassword("admin123");
+    setEmail("admin@eqms.id");
+    setPassword("EQMS1234");
   };
 
   return (
@@ -124,7 +124,7 @@ export default function Login() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@kebun.id"
+                  placeholder="admin@eqms.id"
                   className="pl-9 h-11"
                 />
               </div>
@@ -167,7 +167,7 @@ export default function Login() {
             onClick={fillDemo}
             className="w-full mt-3 text-xs text-muted-foreground hover:text-[#1B4D3E] transition-colors"
           >
-            Gunakan akun demo (admin@kebun.id / admin123)
+            Gunakan akun demo (admin@eqms.id / EQMS1234)
           </button>
         </form>
       </div>
