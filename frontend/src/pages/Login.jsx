@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import api, { formatApiErrorDetail } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
-const HERO = "https://images.unsplash.com/photo-1540843650088-e05e97f1855b?crop=entropy&cs=srgb&fm=jpg&q=85&w=1200";
+const HERO =
+  "https://images.unsplash.com/photo-1618344322843-ee8929d42671?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njd8MHwxfHNlYXJjaHw0fHxwYWxtJTIwcGxhbnRhdGlvbnxlbnwwfHx8Z3JlZW58MTc4OTEzNzQ1Nnww&ixlib=rb-4.1.0&q=85&w=1600";
 
 export default function Login() {
   const { setUser } = useAuth();
