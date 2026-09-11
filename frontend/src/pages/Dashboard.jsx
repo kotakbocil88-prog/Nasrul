@@ -97,11 +97,11 @@ function greetingText() {
 }
 
 function KebunBreakdownCard({ item }) {
-  const max = Math.max(1, ...item.afdelings.map((a) => a.count));
+  const pct = item.total ? Math.round((item.tagged / item.total) * 100) : 0;
   return (
     <div className="stat-elegant rounded-2xl border p-5 fade-in" style={{ "--stat-accent": "#10B981" }}>
       <div className="stat-glow" />
-      <div className="relative flex items-start justify-between mb-4">
+      <div className="relative flex items-start justify-between mb-3">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-emerald-50 ring-1 ring-black/5 flex items-center justify-center">
             <Leaf className="w-4 h-4 text-[#10B981]" />
@@ -120,23 +120,35 @@ function KebunBreakdownCard({ item }) {
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">data</div>
         </div>
       </div>
+      {/* Ringkasan tagging tingkat kebun */}
+      <div className="relative mb-4">
+        <div className="flex items-center justify-between text-[11px] mb-1">
+          <span className="font-semibold text-emerald-700">{item.tagged.toLocaleString("id-ID")} sudah</span>
+          <span className="font-semibold text-amber-600">{item.untagged.toLocaleString("id-ID")} belum</span>
+        </div>
+        <div className="h-2 w-full rounded-full bg-amber-100 overflow-hidden flex">
+          <div className="h-full bg-emerald-500" style={{ width: `${pct}%` }} />
+        </div>
+        <div className="text-[10px] text-muted-foreground mt-1">{pct}% sudah di-tagging</div>
+      </div>
       <div className="relative space-y-2">
-        {item.afdelings.map((a) => (
-          <div key={a.afdeling} className="flex items-center gap-2">
-            <span className="w-16 shrink-0 text-xs font-medium text-[#0B1D15] truncate" title={a.afdeling}>
-              Afd {a.afdeling}
-            </span>
-            <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-[#84CC16] to-[#10B981]"
-                style={{ width: `${(a.count / max) * 100}%` }}
-              />
+        {item.afdelings.map((a) => {
+          const apct = a.count ? (a.tagged / a.count) * 100 : 0;
+          return (
+            <div key={a.afdeling} className="flex items-center gap-2">
+              <span className="w-16 shrink-0 text-xs font-medium text-[#0B1D15] truncate" title={a.afdeling}>
+                Afd {a.afdeling}
+              </span>
+              <div className="flex-1 h-2 rounded-full bg-amber-100 overflow-hidden flex" title={`${a.tagged} sudah / ${a.untagged} belum`}>
+                <div className="h-full bg-emerald-500" style={{ width: `${apct}%` }} />
+              </div>
+              <span className="w-16 shrink-0 text-right text-xs font-mono font-semibold">
+                <span className="text-emerald-700">{a.tagged.toLocaleString("id-ID")}</span>
+                <span className="text-muted-foreground">/{a.count.toLocaleString("id-ID")}</span>
+              </span>
             </div>
-            <span className="w-12 shrink-0 text-right text-xs font-mono font-semibold text-[#1B4D3E]">
-              {a.count.toLocaleString("id-ID")}
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -255,6 +267,18 @@ export default function Dashboard() {
     return { tagged, untagged: baseFiltered.length - tagged, total: baseFiltered.length };
   }, [baseFiltered]);
 
+  const globalUntagged = useMemo(
+    () => records.reduce((n, r) => n + (isTagged(r) ? 0 : 1), 0),
+    [records]
+  );
+
+  const focusUntagged = () => {
+    setStatusFilter("untagged");
+    setTimeout(() => {
+      document.querySelector('[data-testid="records-table"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+  };
+
   const filtered = useMemo(() => {
     if (statusFilter === "tagged") return baseFiltered.filter((r) => isTagged(r));
     if (statusFilter === "untagged") return baseFiltered.filter((r) => !isTagged(r));
@@ -263,25 +287,36 @@ export default function Dashboard() {
 
   const breakdown = useMemo(() => {
     const map = {};
-    for (const r of filtered) {
+    for (const r of baseFiltered) {
       const k = r.kebun || "(Tanpa Kebun)";
-      if (!map[k]) map[k] = { kebun: k, total: 0, afd: {}, bloks: new Set() };
+      if (!map[k]) map[k] = { kebun: k, total: 0, tagged: 0, afd: {}, bloks: new Set() };
       map[k].total += 1;
+      const tg = isTagged(r);
+      if (tg) map[k].tagged += 1;
       const a = r.afdeling || "-";
-      map[k].afd[a] = (map[k].afd[a] || 0) + 1;
+      if (!map[k].afd[a]) map[k].afd[a] = { count: 0, tagged: 0 };
+      map[k].afd[a].count += 1;
+      if (tg) map[k].afd[a].tagged += 1;
       if (r.blok) map[k].bloks.add(r.blok);
     }
     return Object.values(map)
       .map((x) => ({
         kebun: x.kebun,
         total: x.total,
+        tagged: x.tagged,
+        untagged: x.total - x.tagged,
         blokCount: x.bloks.size,
         afdelings: Object.entries(x.afd)
-          .map(([afdeling, count]) => ({ afdeling, count }))
+          .map(([afdeling, v]) => ({
+            afdeling,
+            count: v.count,
+            tagged: v.tagged,
+            untagged: v.count - v.tagged,
+          }))
           .sort((p, q) => String(p.afdeling).localeCompare(String(q.afdeling), "id", { numeric: true })),
       }))
       .sort((p, q) => q.total - p.total);
-  }, [filtered]);
+  }, [baseFiltered]);
 
   useEffect(() => {
     setPage(1);
@@ -369,6 +404,7 @@ export default function Dashboard() {
     const meta = {
       labels: { file: "label_qr_kebun.pdf", label: "PDF" },
       table: { file: "laporan_tabel_kebun.pdf", label: "PDF" },
+      untagged: { file: "daftar_belum_tagging.pdf", label: "PDF" },
       excel: { file: "data_kebun.xlsx", label: "Excel" },
     }[mode] || { file: "export", label: "File" };
     try {
@@ -423,6 +459,21 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
+            {globalUntagged > 0 && (
+              <button
+                type="button"
+                data-testid="header-untagged-badge"
+                onClick={focusUntagged}
+                title="Lihat lokasi yang belum di-tagging"
+                className="flex items-center gap-1.5 rounded-full bg-amber-400/20 ring-1 ring-amber-300/40 px-2.5 sm:px-3 py-1.5 text-amber-100 hover:bg-amber-400/30 transition-colors"
+              >
+                <AlertCircle className="w-4 h-4" />
+                <span className="text-xs font-semibold whitespace-nowrap">
+                  {globalUntagged.toLocaleString("id-ID")}
+                  <span className="hidden sm:inline"> Belum di-tagging</span>
+                </span>
+              </button>
+            )}
             <div
               className="hidden sm:flex items-center gap-2.5 pl-1 pr-3 py-1 rounded-full bg-white/10 ring-1 ring-white/10"
               data-testid="current-user"
@@ -569,10 +620,10 @@ export default function Dashboard() {
               </div>
               <div>
                 <h3 className="font-heading font-bold text-sm text-[#0B1D15] leading-none">
-                  Ringkasan per Kebun &amp; Afdeling
+                  Ringkasan Tagging per Kebun &amp; Afdeling
                 </h3>
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  {breakdown.length} kebun · jumlah data per afdeling
+                  {breakdown.length} kebun · sudah vs belum di-tagging per afdeling
                 </p>
               </div>
             </div>
@@ -707,6 +758,15 @@ export default function Dashboard() {
                 className="h-10 border-[#F59E0B]/50 text-[#b45309] hover:bg-amber-50"
               >
                 <FileText className="w-4 h-4 mr-1.5" /> PDF Tabel
+              </Button>
+              <Button
+                data-testid="export-untagged-button"
+                onClick={() => exportPdf("untagged")}
+                disabled={exporting === "untagged"}
+                variant="outline"
+                className="h-10 border-amber-400/60 text-amber-700 hover:bg-amber-50"
+              >
+                <AlertCircle className="w-4 h-4 mr-1.5" /> Daftar Belum
               </Button>
               <Button
                 data-testid="export-excel-button"

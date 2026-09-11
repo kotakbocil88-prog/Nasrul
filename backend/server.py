@@ -512,6 +512,63 @@ def build_table_pdf(docs) -> io.BytesIO:
     return buf
 
 
+def build_untagged_pdf(docs) -> io.BytesIO:
+    """Daftar checklist lokasi yang BELUM di-tagging untuk petugas lapangan."""
+    buf = io.BytesIO()
+    c = pdf_canvas.Canvas(buf, pagesize=A4)
+    pw, ph = A4
+    margin = 14 * mm
+
+    # kolom: No | Kebun | Afdeling | Blok | Code LSU | Koord X (isi) | Koord Y (isi)
+    col_x = [margin, margin + 14 * mm, margin + 44 * mm, margin + 66 * mm,
+             margin + 90 * mm, margin + 116 * mm, margin + 150 * mm, pw - margin]
+    headers = ["No", "Kebun", "Afdeling", "Blok", "Code LSU", "Koord X", "Koord Y"]
+    row_h = 8 * mm
+
+    def draw_header(y):
+        c.setFillColor(colors.HexColor("#0F291E"))
+        c.setFont("Helvetica-Bold", 15)
+        c.drawString(margin, y, "Daftar Lokasi Belum di-tagging")
+        y -= 7 * mm
+        c.setFont("Helvetica", 9)
+        c.setFillColor(colors.HexColor("#4B5563"))
+        c.drawString(margin, y, f"Total {len(docs)} lokasi perlu di-tagging  -  {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+        y -= 8 * mm
+        # header row
+        c.setFillColor(colors.HexColor("#0F291E"))
+        c.rect(margin, y - row_h, pw - 2 * margin, row_h, stroke=0, fill=1)
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 9)
+        for i, h in enumerate(headers):
+            c.drawString(col_x[i] + 2 * mm, y - row_h + 2.6 * mm, h)
+        return y - row_h
+
+    y = draw_header(ph - margin)
+    c.setFont("Helvetica", 9)
+    for idx, d in enumerate(docs, 1):
+        if y - row_h < margin:
+            c.showPage()
+            y = draw_header(ph - margin)
+            c.setFont("Helvetica", 9)
+        c.setStrokeColor(colors.HexColor("#E2E8F0"))
+        c.setLineWidth(0.4)
+        c.rect(margin, y - row_h, pw - 2 * margin, row_h, stroke=1, fill=0)
+        for i in range(1, len(headers)):
+            c.line(col_x[i], y - row_h, col_x[i], y)
+        c.setFillColor(colors.HexColor("#1F2937"))
+        vals = [str(idx), str(d.get("kebun", "")), str(d.get("afdeling", "")),
+                str(d.get("blok", "")), str(d.get("code_lsu", "")), "", ""]
+        for i, v in enumerate(vals):
+            c.drawString(col_x[i] + 2 * mm, y - row_h + 2.6 * mm, v[:20])
+        y -= row_h
+    if not docs:
+        c.setFont("Helvetica", 12)
+        c.setFillColor(colors.HexColor("#047857"))
+        c.drawCentredString(pw / 2, ph / 2, "Semua lokasi sudah di-tagging.")
+    c.showPage(); c.save(); buf.seek(0)
+    return buf
+
+
 def _pdf_response(buf, filename):
     return StreamingResponse(buf, media_type="application/pdf",
                              headers={"Content-Disposition": f"attachment; filename={filename}"})
@@ -541,19 +598,27 @@ async def export_table_selected(body: IdList, user: dict = Depends(get_current_u
     return _pdf_response(build_table_pdf(docs), "laporan_tabel_kebun.pdf")
 
 
+@api_router.get("/records/export/untagged")
+async def export_untagged(user: dict = Depends(get_current_user)):
+    docs = await _fetch_docs(None)
+    untagged = [d for d in docs if not _is_tagged(d)]
+    return _pdf_response(build_untagged_pdf(untagged), "daftar_belum_tagging.pdf")
+
+
 def build_excel(docs) -> io.BytesIO:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Data Kebun"
-    headers = ["Id Actual", "Kebun", "Afdeling", "Blok", "Code_LSU", "Koord_X", "Koord_Y"]
+    headers = ["Id Actual", "Kebun", "Afdeling", "Blok", "Code_LSU", "Koord_X", "Koord_Y", "Keterangan"]
     ws.append(headers)
     for d in docs:
         ws.append([
             d.get("id_actual", ""), d.get("kebun", ""), d.get("afdeling", ""),
             d.get("blok", ""), d.get("code_lsu", ""),
             fmt_num(d.get("koord_x")), fmt_num(d.get("koord_y")),
+            "Sudah di-tagging" if _is_tagged(d) else "Belum di-tagging",
         ])
-    widths = [30, 16, 12, 12, 14, 16, 16]
+    widths = [30, 16, 12, 12, 14, 16, 16, 18]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
     # header bold
