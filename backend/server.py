@@ -49,7 +49,7 @@ class Record(BaseModel):
     code_lsu: str = ""
     koord_x: float = 0
     koord_y: float = 0
-    id_actual: int = 0
+    id_actual: str = ""
     created_at: Optional[str] = None
 
 
@@ -140,6 +140,23 @@ async def get_current_user(request: Request) -> dict:
 
 
 # ---------------------------------------------------------------- QR helpers
+def fmt_num(v) -> str:
+    """Format koordinat memakai koma sebagai pemisah desimal (format Indonesia)."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return str(v or "")
+    if f == int(f):
+        return str(int(f))
+    return repr(f).replace(".", ",")
+
+
+def build_id_actual(r: dict) -> str:
+    """Id Actual = gabungan Kebun + Blok + Code LSU + Koord_X + Koord_Y (tanpa pemisah)."""
+    return (f"{r.get('kebun','')}{r.get('blok','')}{r.get('code_lsu','')}"
+            f"{fmt_num(r.get('koord_x'))}{fmt_num(r.get('koord_y'))}")
+
+
 def build_payload(r: dict) -> str:
     return (f"Kebun: {r.get('kebun','')} | Afdeling: {r.get('afdeling','')} | "
             f"Blok: {r.get('blok','')} | LSU: {r.get('code_lsu','')} | "
@@ -200,13 +217,14 @@ async def next_id_actual() -> int:
 
 def serialize(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
+    doc["id_actual"] = build_id_actual(doc)
     doc["payload"] = build_payload(doc)
     return doc
 
 
 @api_router.get("/records")
 async def list_records(user: dict = Depends(get_current_user)):
-    docs = await db.records.find().sort("id_actual", 1).to_list(5000)
+    docs = await db.records.find().sort("created_at", 1).to_list(5000)
     return [serialize(d) for d in docs]
 
 
@@ -226,7 +244,6 @@ async def stats(user: dict = Depends(get_current_user)):
 @api_router.post("/records")
 async def create_record(body: RecordInput, user: dict = Depends(get_current_user)):
     doc = body.model_dump()
-    doc["id_actual"] = await next_id_actual()
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     res = await db.records.insert_one(doc)
     saved = await db.records.find_one({"_id": res.inserted_id})
@@ -333,7 +350,6 @@ async def import_confirm(body: ImportConfirm, user: dict = Depends(get_current_u
     inserted = 0
     for r in body.rows:
         doc = r.model_dump()
-        doc["id_actual"] = await next_id_actual()
         doc["created_at"] = datetime.now(timezone.utc).isoformat()
         await db.records.insert_one(doc)
         inserted += 1
@@ -350,9 +366,11 @@ def _draw_qr(c, payload, x, y, size):
 async def _fetch_docs(ids: Optional[List[str]]):
     if ids:
         oids = [ObjectId(i) for i in ids]
-        docs = await db.records.find({"_id": {"$in": oids}}).sort("id_actual", 1).to_list(5000)
+        docs = await db.records.find({"_id": {"$in": oids}}).sort("created_at", 1).to_list(5000)
     else:
-        docs = await db.records.find().sort("id_actual", 1).to_list(5000)
+        docs = await db.records.find().sort("created_at", 1).to_list(5000)
+    for d in docs:
+        d["id_actual"] = build_id_actual(d)
     return docs
 
 

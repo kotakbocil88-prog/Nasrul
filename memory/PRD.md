@@ -28,6 +28,11 @@ Kelola data: Kebun (teks), Afdeling (teks), Blok (teks), Code LSU (teks), Koord_
 - Verified: testing agent 100% backend (14/14) & frontend
 
 ## Backlog (P1/P2)
+
+## Updates (2025-07)
+- Rebrand: nama aplikasi "Kebun LSU" -> "DATA EPCS TAGGING" (Dashboard header + Login desktop/mobile)
+- Id Actual bukan lagi auto-increment. Sekarang = gabungan Kebun + Blok + Code LSU + Koord_X + Koord_Y (tanpa Afdeling, tanpa pemisah). Koordinat pakai koma desimal. Contoh: KSL+OA11+TS01+110,400113+0,654521 = "KSLOA11TS01110,4001130,654521". Dihitung dinamis di backend serialize()/_fetch_docs(); RecordDialog menampilkan preview Id Actual live. Backend tested 9/9 pass.
+- OPEN: konfirmasi apakah Afdeling harus ikut dalam Id Actual (contoh user mengecualikannya). Pending: format isi QR (tanpa label header & tanpa "/").
 - P1: Pagination / row-limit switcher for large datasets
 - P1: Coordinate map visualizer (Koord X vs Y grid)
 - P2: Brute-force lockout, Mongo aggregation for stats, lifespan handlers

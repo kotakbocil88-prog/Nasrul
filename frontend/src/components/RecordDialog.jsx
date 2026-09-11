@@ -37,6 +37,14 @@ export function RecordDialog({ open, onOpenChange, record, onSaved }) {
 
   const payload = `Kebun: ${form.kebun} | Afdeling: ${form.afdeling} | Blok: ${form.blok} | LSU: ${form.code_lsu} | X: ${form.koord_x} | Y: ${form.koord_y}`;
 
+  const fmtNum = (v) => {
+    if (v === "" || v === null || v === undefined) return "";
+    const n = parseFloat(String(v).replace(",", "."));
+    if (Number.isNaN(n)) return "";
+    return String(n).replace(".", ",");
+  };
+  const idActual = `${form.kebun}${form.blok}${form.code_lsu}${fmtNum(form.koord_x)}${fmtNum(form.koord_y)}`;
+
   const save = async () => {
     setSaving(true);
     try {
@@ -108,6 +116,14 @@ export function RecordDialog({ open, onOpenChange, record, onSaved }) {
             <p className="text-[10px] text-muted-foreground mt-3 text-center break-all font-mono leading-relaxed">
               {payload}
             </p>
+            <div className="w-full mt-3 pt-3 border-t border-border">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Id Actual (otomatis dari data)
+              </span>
+              <p className="text-[11px] font-mono font-semibold text-[#1B4D3E] break-all mt-1" data-testid="record-id-actual-preview">
+                {idActual || "-"}
+              </p>
+            </div>
           </div>
         </div>
         <DialogFooter>
