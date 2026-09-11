@@ -43,3 +43,5 @@ Kelola data: Kebun (teks), Afdeling (teks), Blok (teks), Code LSU (teks), Koord_
 - P2: Bulk delete, import validation preview table
 
 - DONE (2025-07 v7): Peta satelit (LayersControl OSM + Esri World Imagery), login slideshow 3 foto sawit cross-fade + dots, multiple delete (POST /api/records/delete-bulk + tombol Hapus Terpilih + konfirmasi). Ringkasan dashboard per Kebun & Afdeling (agregasi client-side, KebunBreakdownCard, reaktif filter). Label PDF baris1 kini sertakan Afdeling: "Kebun Afdeling Blok Code_LSU" (contoh "KSL 1 PB36 TS09"), baris2 koordinat koma desimal. delete-bulk 8/8 & label regresi 6/6 pass; frontend semua verified pass.
+
+- DONE (2025-07 v8): Kolom "Keterangan" (status tagging) di tabel Dashboard. Badge hijau "Sudah di-tagging" jika Koord X & Koord Y terisi, badge kuning "Belum di-tagging" jika kosong. Helper isTagged/hasCoord (frontend-only, computed). colSpan tabel 10->11. Verified via screenshot login admin.

@@ -20,6 +20,8 @@ import {
   ChevronLeft,
   ChevronRight,
   QrCode,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -153,6 +155,17 @@ function payloadOf(r) {
     `${r.kebun ?? ""}${r.afdeling ?? ""}${r.blok ?? ""}${r.code_lsu ?? ""}${fmtNum(r.koord_x)}${fmtNum(r.koord_y)}`
   );
 }
+
+// Status tagging: dianggap "sudah di-tagging" jika Koord X & Koord Y terisi
+function hasCoord(v) {
+  if (v === null || v === undefined) return false;
+  const s = String(v).trim();
+  return s !== "";
+}
+function isTagged(r) {
+  return hasCoord(r.koord_x) && hasCoord(r.koord_y);
+}
+
 
 const LABEL_SIZES = {
   small: { name: "Kecil", perPage: 24, cols: 4, qr: 68, f1: "text-[11px]", f2: "text-[10px]" },
@@ -674,7 +687,7 @@ export default function Dashboard() {
                       className="border-white/50 data-[state=checked]:bg-[#84CC16] data-[state=checked]:border-[#84CC16] data-[state=checked]:text-[#0F291E]"
                     />
                   </th>
-                  {["QR", "Id Actual", "Kebun", "Afdeling", "Blok", "Code LSU", "Koord X", "Koord Y", "Aksi"].map(
+                  {["QR", "Id Actual", "Kebun", "Afdeling", "Blok", "Code LSU", "Koord X", "Koord Y", "Keterangan", "Aksi"].map(
                     (h) => (
                       <th key={h} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">
                         {h}
@@ -686,13 +699,13 @@ export default function Dashboard() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="text-center py-16 text-muted-foreground">
+                    <td colSpan={11} className="text-center py-16 text-muted-foreground">
                       Memuat data...
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="text-center py-16 text-muted-foreground" data-testid="empty-state">
+                    <td colSpan={11} className="text-center py-16 text-muted-foreground" data-testid="empty-state">
                       Belum ada data. Tambah manual atau impor dari Excel.
                     </td>
                   </tr>
@@ -731,6 +744,23 @@ export default function Dashboard() {
                       <td className="px-4 py-2 font-mono">{r.code_lsu}</td>
                       <td className="px-4 py-2 font-mono text-muted-foreground">{r.koord_x}</td>
                       <td className="px-4 py-2 font-mono text-muted-foreground">{r.koord_y}</td>
+                      <td className="px-4 py-2">
+                        {isTagged(r) ? (
+                          <span
+                            data-testid={`status-tagged-${r._id}`}
+                            className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-700 px-2.5 py-1 text-xs font-semibold whitespace-nowrap"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Sudah di-tagging
+                          </span>
+                        ) : (
+                          <span
+                            data-testid={`status-untagged-${r._id}`}
+                            className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 px-2.5 py-1 text-xs font-semibold whitespace-nowrap"
+                          >
+                            <AlertCircle className="w-3.5 h-3.5" /> Belum di-tagging
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-2">
                         <div className="flex items-center gap-1">
                           <Button
