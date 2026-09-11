@@ -121,8 +121,8 @@ backend:
 
 metadata:
   created_by: "main_agent"
-  version: "1.1"
-  test_sequence: 2
+  version: "1.2"
+  test_sequence: 3
   run_ui: false
 
 test_plan:
@@ -136,3 +136,40 @@ agent_communication:
       message: "Login: admin@kebun.id / admin123. Tolong test endpoint records: create record dengan kebun=KSL, blok=OA11, code_lsu=TS01, koord_x=110.400113, koord_y=0.654521 -> id_actual harus 'KSLOA11TS01110,4001130,654521'. Test PUT update mengubah koord dan id_actual ikut berubah. Test GET /api/records mengembalikan id_actual string. Test import confirm dan export PDF labels/table (200 OK)."
     - agent: "testing"
       message: "Backend testing complete - ALL TESTS PASSED (9/9). Id Actual generation working perfectly: concatenation format correct, comma decimal separator working, integer coordinates render without decimals, string type confirmed, all CRUD operations successful, PDF exports working (labels & table), stats endpoint working. No errors or issues found. Ready for production."
+
+## --- Update 2 (afdeling in Id Actual + QR=IdActual + Excel export) ---
+backend:
+  - task: "Id Actual termasuk Afdeling + QR payload = Id Actual"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "build_id_actual sekarang = kebun+afdeling+blok+code_lsu+koordX+koordY. build_payload (isi QR) sekarang mengembalikan build_id_actual (QR = Id Actual). Verifikasi: create record KSL/1/OA11/TS01/110.400113/0.654521 -> id_actual & payload harus 'KSL1OA11TS01110,4001130,654521'."
+        - working: true
+          agent: "testing"
+          comment: "✅ ALL TESTS PASSED. Regression testing completed successfully: (1) POST /api/records with afdeling='1' created record with correct id_actual='KSL1OA11TS01110,4001130,654521' AND payload='KSL1OA11TS01110,4001130,654521' (both fields match exactly, afdeling included). (2) GET /api/records confirmed record appears with correct id_actual and payload as strings. (3) PUT /api/records/{id} with afdeling changed from '1' to '2' correctly recomputed id_actual='KSL2OA11TS01110,4001130,654521' and payload='KSL2OA11TS01110,4001130,654521' (both fields updated correctly). (4) All PDF exports still working: GET/POST /api/records/export/labels (200, application/pdf), GET/POST /api/records/export/table (200, application/pdf). (5) GET /api/records/stats returned 200 with correct stats. No 500 errors. Id Actual now correctly includes Afdeling, and QR payload equals Id Actual exactly."
+  - task: "Ekspor Excel (.xlsx) dengan kolom Id Actual"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Endpoint baru GET /api/records/export/excel (semua data) & POST /api/records/export/excel (ids terpilih). Kolom: Id Actual, Kebun, Afdeling, Blok, Code_LSU, Koord_X, Koord_Y. Koordinat pakai koma. Sudah dicek via curl (200, header benar, 3268 baris)."
+        - working: true
+          agent: "testing"
+          comment: "✅ ALL TESTS PASSED. Excel export endpoints working perfectly: (1) GET /api/records/export/excel returned 200 with correct content-type 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', valid xlsx file (144KB, 3269 rows including header). (2) POST /api/records/export/excel with selected IDs returned 200 with correct content-type, valid xlsx file (5KB). (3) Excel headers verified: ['Id Actual', 'Kebun', 'Afdeling', 'Blok', 'Code_LSU', 'Koord_X', 'Koord_Y'] - exactly as specified. (4) Data format verified: Id Actual includes afdeling (e.g., 'KSL1OA11TS01110,4001130,654521'), coordinates use comma decimal separator (e.g., '110,400113', '0,654521'). Excel export fully functional."
+
+agent_communication:
+    - agent: "main"
+      message: "Test ulang: (1) POST /api/records body {kebun:KSL,afdeling:1,blok:OA11,code_lsu:TS01,koord_x:110.400113,koord_y:0.654521} -> id_actual & payload == 'KSL1OA11TS01110,4001130,654521'. (2) GET /api/records/export/excel -> 200 xlsx dgn header [Id Actual,Kebun,Afdeling,Blok,Code_LSU,Koord_X,Koord_Y]. (3) POST /api/records/export/excel {ids:[...]} -> 200 xlsx subset. (4) PDF labels & table masih 200. (5) GET /api/records id_actual mengandung afdeling."
+    - agent: "testing"
+      message: "Backend regression testing complete - ALL TESTS PASSED (11/11). ✅ Id Actual now correctly includes Afdeling in format Kebun+Afdeling+Blok+CodeLSU+KoordX+KoordY. ✅ QR payload field equals Id Actual exactly (verified in POST, GET, and PUT responses). ✅ PUT endpoint correctly recomputes id_actual and payload when afdeling changes. ✅ NEW Excel export endpoints working: GET/POST /api/records/export/excel return valid xlsx files with correct headers [Id Actual, Kebun, Afdeling, Blok, Code_LSU, Koord_X, Koord_Y] and comma decimal format for coordinates. ✅ Existing PDF exports still working (labels & table, both GET and POST). ✅ Stats endpoint working. No errors or issues found. All regression requirements verified successfully."

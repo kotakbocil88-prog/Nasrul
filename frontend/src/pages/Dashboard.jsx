@@ -77,8 +77,19 @@ function StatCard({ icon: Icon, label, value, accent }) {
   );
 }
 
+function fmtNum(v) {
+  if (v === "" || v === null || v === undefined) return "";
+  const n = parseFloat(String(v).replace(",", "."));
+  if (Number.isNaN(n)) return "";
+  return String(n).replace(".", ",");
+}
+
 function payloadOf(r) {
-  return `Kebun: ${r.kebun} | Afdeling: ${r.afdeling} | Blok: ${r.blok} | LSU: ${r.code_lsu} | X: ${r.koord_x} | Y: ${r.koord_y}`;
+  // Isi QR = Id Actual (gabungan Kebun+Afdeling+Blok+CodeLSU+Koord_X+Koord_Y, tanpa pemisah)
+  return (
+    r.id_actual ||
+    `${r.kebun ?? ""}${r.afdeling ?? ""}${r.blok ?? ""}${r.code_lsu ?? ""}${fmtNum(r.koord_x)}${fmtNum(r.koord_y)}`
+  );
 }
 
 export default function Dashboard() {
@@ -197,6 +208,11 @@ export default function Dashboard() {
   const exportPdf = async (mode, ids = null) => {
     const key = ids ? `sel-${mode}` : mode;
     setExporting(key);
+    const meta = {
+      labels: { file: "label_qr_kebun.pdf", label: "PDF" },
+      table: { file: "laporan_tabel_kebun.pdf", label: "PDF" },
+      excel: { file: "data_kebun.xlsx", label: "Excel" },
+    }[mode] || { file: "export", label: "File" };
     try {
       const res = ids
         ? await api.post(`/records/export/${mode}`, { ids }, { responseType: "blob" })
@@ -204,12 +220,12 @@ export default function Dashboard() {
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url;
-      a.download = mode === "labels" ? "label_qr_kebun.pdf" : "laporan_tabel_kebun.pdf";
+      a.download = meta.file;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("PDF berhasil dibuat");
+      toast.success(`${meta.label} berhasil dibuat`);
     } catch (e) {
-      toast.error("Gagal mengekspor PDF");
+      toast.error(`Gagal mengekspor ${meta.label}`);
     } finally {
       setExporting("");
     }
@@ -316,6 +332,15 @@ export default function Dashboard() {
                 <FileText className="w-4 h-4 mr-1.5" /> PDF Tabel
               </Button>
               <Button
+                data-testid="export-excel-button"
+                onClick={() => exportPdf("excel")}
+                disabled={exporting === "excel"}
+                variant="outline"
+                className="h-10 border-[#059669]/50 text-[#047857] hover:bg-emerald-50"
+              >
+                <Download className="w-4 h-4 mr-1.5" /> Ekspor Excel
+              </Button>
+              <Button
                 data-testid="map-button"
                 onClick={() => setMapOpen(true)}
                 variant="outline"
@@ -355,6 +380,16 @@ export default function Dashboard() {
                 className="border-white/30 text-white hover:bg-white/10 hover:text-white"
               >
                 <FileText className="w-4 h-4 mr-1.5" /> Cetak Tabel Terpilih
+              </Button>
+              <Button
+                data-testid="export-selected-excel-button"
+                onClick={() => exportPdf("excel", [...selected])}
+                disabled={exporting === "sel-excel"}
+                size="sm"
+                variant="outline"
+                className="border-white/30 text-white hover:bg-white/10 hover:text-white"
+              >
+                <Download className="w-4 h-4 mr-1.5" /> Ekspor Excel Terpilih
               </Button>
               <Button
                 data-testid="clear-selection-button"

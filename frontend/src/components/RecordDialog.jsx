@@ -35,15 +35,15 @@ export function RecordDialog({ open, onOpenChange, record, onSaved }) {
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const payload = `Kebun: ${form.kebun} | Afdeling: ${form.afdeling} | Blok: ${form.blok} | LSU: ${form.code_lsu} | X: ${form.koord_x} | Y: ${form.koord_y}`;
-
   const fmtNum = (v) => {
     if (v === "" || v === null || v === undefined) return "";
     const n = parseFloat(String(v).replace(",", "."));
     if (Number.isNaN(n)) return "";
     return String(n).replace(".", ",");
   };
-  const idActual = `${form.kebun}${form.blok}${form.code_lsu}${fmtNum(form.koord_x)}${fmtNum(form.koord_y)}`;
+  const idActual = `${form.kebun}${form.afdeling}${form.blok}${form.code_lsu}${fmtNum(form.koord_x)}${fmtNum(form.koord_y)}`;
+  // Isi QR = sama persis dengan Id Actual
+  const payload = idActual;
 
   const save = async () => {
     setSaving(true);
@@ -113,12 +113,9 @@ export function RecordDialog({ open, onOpenChange, record, onSaved }) {
             <div className="bg-white p-3 rounded-lg border">
               <QRCodeCanvas value={payload || " "} size={150} fgColor="#0F291E" level="M" />
             </div>
-            <p className="text-[10px] text-muted-foreground mt-3 text-center break-all font-mono leading-relaxed">
-              {payload}
-            </p>
-            <div className="w-full mt-3 pt-3 border-t border-border">
+            <div className="w-full mt-4 pt-3 border-t border-border">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Id Actual (otomatis dari data)
+                Id Actual / Isi QR (otomatis dari data)
               </span>
               <p className="text-[11px] font-mono font-semibold text-[#1B4D3E] break-all mt-1" data-testid="record-id-actual-preview">
                 {idActual || "-"}

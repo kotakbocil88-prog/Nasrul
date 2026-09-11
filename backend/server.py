@@ -152,15 +152,14 @@ def fmt_num(v) -> str:
 
 
 def build_id_actual(r: dict) -> str:
-    """Id Actual = gabungan Kebun + Blok + Code LSU + Koord_X + Koord_Y (tanpa pemisah)."""
-    return (f"{r.get('kebun','')}{r.get('blok','')}{r.get('code_lsu','')}"
+    """Id Actual = gabungan Kebun + Afdeling + Blok + Code LSU + Koord_X + Koord_Y (tanpa pemisah)."""
+    return (f"{r.get('kebun','')}{r.get('afdeling','')}{r.get('blok','')}{r.get('code_lsu','')}"
             f"{fmt_num(r.get('koord_x'))}{fmt_num(r.get('koord_y'))}")
 
 
 def build_payload(r: dict) -> str:
-    return (f"Kebun: {r.get('kebun','')} | Afdeling: {r.get('afdeling','')} | "
-            f"Blok: {r.get('blok','')} | LSU: {r.get('code_lsu','')} | "
-            f"X: {r.get('koord_x','')} | Y: {r.get('koord_y','')}")
+    """Isi QR = sama persis dengan Id Actual (nilai tergabung tanpa label/pemisah)."""
+    return build_id_actual(r)
 
 
 def make_qr_image(payload: str):
@@ -482,6 +481,46 @@ async def export_table(user: dict = Depends(get_current_user)):
 async def export_table_selected(body: IdList, user: dict = Depends(get_current_user)):
     docs = await _fetch_docs(body.ids)
     return _pdf_response(build_table_pdf(docs), "laporan_tabel_kebun.pdf")
+
+
+def build_excel(docs) -> io.BytesIO:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Data Kebun"
+    headers = ["Id Actual", "Kebun", "Afdeling", "Blok", "Code_LSU", "Koord_X", "Koord_Y"]
+    ws.append(headers)
+    for d in docs:
+        ws.append([
+            d.get("id_actual", ""), d.get("kebun", ""), d.get("afdeling", ""),
+            d.get("blok", ""), d.get("code_lsu", ""),
+            fmt_num(d.get("koord_x")), fmt_num(d.get("koord_y")),
+        ])
+    widths = [30, 16, 12, 12, 14, 16, 16]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+    # header bold
+    for cell in ws[1]:
+        cell.font = openpyxl.styles.Font(bold=True)
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return buf
+
+
+def _excel_response(buf, filename):
+    return StreamingResponse(
+        buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+
+@api_router.get("/records/export/excel")
+async def export_excel(user: dict = Depends(get_current_user)):
+    docs = await _fetch_docs(None)
+    return _excel_response(build_excel(docs), "data_kebun.xlsx")
+
+
+@api_router.post("/records/export/excel")
+async def export_excel_selected(body: IdList, user: dict = Depends(get_current_user)):
+    docs = await _fetch_docs(body.ids)
+    return _excel_response(build_excel(docs), "data_kebun.xlsx")
 
 
 app.include_router(api_router)
