@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Leaf, QrCode, Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,8 +7,11 @@ import { Label } from "@/components/ui/label";
 import api, { formatApiErrorDetail } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
-const HERO =
-  "https://images.unsplash.com/photo-1618344322843-ee8929d42671?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njd8MHwxfHNlYXJjaHw0fHxwYWxtJTIwcGxhbnRhdGlvbnxlbnwwfHx8Z3JlZW58MTc4OTEzNzQ1Nnww&ixlib=rb-4.1.0&q=85&w=1600";
+const HERO_IMAGES = [
+  "https://images.unsplash.com/photo-1618344322843-ee8929d42671?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njd8MHwxfHNlYXJjaHw0fHxwYWxtJTIwcGxhbnRhdGlvbnxlbnwwfHx8Z3JlZW58MTc4OTEzNzQ1Nnww&ixlib=rb-4.1.0&q=85&w=1600",
+  "https://images.unsplash.com/photo-1716725330084-c0752ebd6288?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njd8MHwxfHNlYXJjaHwxfHxwYWxtJTIwcGxhbnRhdGlvbnxlbnwwfHx8Z3JlZW58MTc4OTEzNzQ1Nnww&ixlib=rb-4.1.0&q=85&w=1600",
+  "https://images.pexels.com/photos/3246161/pexels-photo-3246161.jpeg?auto=compress&cs=tinysrgb&w=1600",
+];
 
 export default function Login() {
   const { setUser } = useAuth();
@@ -17,6 +20,14 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [heroIdx, setHeroIdx] = useState(0);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setHeroIdx((i) => (i + 1) % HERO_IMAGES.length);
+    }, 5000);
+    return () => clearInterval(t);
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -42,7 +53,17 @@ export default function Login() {
     <div className="min-h-screen grid lg:grid-cols-2">
       {/* Hero */}
       <div className="relative hidden lg:block">
-        <img src={HERO} alt="Perkebunan" className="absolute inset-0 w-full h-full object-cover" />
+        {HERO_IMAGES.map((src, i) => (
+          <img
+            key={src}
+            src={src}
+            alt="Perkebunan sawit"
+            loading={i === 0 ? "eager" : "lazy"}
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out ${
+              i === heroIdx ? "opacity-100" : "opacity-0"
+            }`}
+          />
+        ))}
         <div className="absolute inset-0 bg-[#0F291E]/70" />
         <div className="relative z-10 flex flex-col justify-between h-full p-12 text-white">
           <div className="flex items-center gap-3">
@@ -59,8 +80,23 @@ export default function Login() {
               Kelola data Kebun, Afdeling, Blok, dan Code LSU. Impor Excel, generate QR, dan ekspor PDF label siap cetak.
             </p>
           </div>
-          <div className="flex items-center gap-2 text-white/60 text-sm">
-            <QrCode className="w-4 h-4" /> Setiap lokasi punya QR unik
+          <div className="flex items-center justify-between text-white/60 text-sm">
+            <div className="flex items-center gap-2">
+              <QrCode className="w-4 h-4" /> Setiap lokasi punya QR unik
+            </div>
+            <div className="flex items-center gap-1.5" data-testid="hero-slideshow-dots">
+              {HERO_IMAGES.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  aria-label={`Gambar ${i + 1}`}
+                  onClick={() => setHeroIdx(i)}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    i === heroIdx ? "w-6 bg-[#84CC16]" : "w-1.5 bg-white/40 hover:bg-white/70"
+                  }`}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>

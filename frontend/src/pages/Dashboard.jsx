@@ -94,6 +94,52 @@ function greetingText() {
   return "Selamat malam";
 }
 
+function KebunBreakdownCard({ item }) {
+  const max = Math.max(1, ...item.afdelings.map((a) => a.count));
+  return (
+    <div className="stat-elegant rounded-2xl border p-5 fade-in" style={{ "--stat-accent": "#10B981" }}>
+      <div className="stat-glow" />
+      <div className="relative flex items-start justify-between mb-4">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 ring-1 ring-black/5 flex items-center justify-center">
+            <Leaf className="w-4 h-4 text-[#10B981]" />
+          </div>
+          <div>
+            <div className="font-heading font-extrabold text-lg text-[#0B1D15] leading-none">{item.kebun}</div>
+            <div className="text-[11px] text-muted-foreground mt-1">
+              {item.afdelings.length} afdeling · {item.blokCount} blok
+            </div>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="font-heading text-2xl font-extrabold text-[#1B4D3E] leading-none">
+            {item.total.toLocaleString("id-ID")}
+          </div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">data</div>
+        </div>
+      </div>
+      <div className="relative space-y-2">
+        {item.afdelings.map((a) => (
+          <div key={a.afdeling} className="flex items-center gap-2">
+            <span className="w-16 shrink-0 text-xs font-medium text-[#0B1D15] truncate" title={a.afdeling}>
+              Afd {a.afdeling}
+            </span>
+            <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#84CC16] to-[#10B981]"
+                style={{ width: `${(a.count / max) * 100}%` }}
+              />
+            </div>
+            <span className="w-12 shrink-0 text-right text-xs font-mono font-semibold text-[#1B4D3E]">
+              {a.count.toLocaleString("id-ID")}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function fmtNum(v) {  if (v === "" || v === null || v === undefined) return "";
   const n = parseFloat(String(v).replace(",", "."));
   if (Number.isNaN(n)) return "";
@@ -116,7 +162,7 @@ const LABEL_SIZES = {
 
 function LabelPreview({ r, size }) {
   const cfg = LABEL_SIZES[size] || LABEL_SIZES.medium;
-  const line1 = [r.kebun, r.blok, r.code_lsu].filter(Boolean).join(" ");
+  const line1 = [r.kebun, r.afdeling, r.blok, r.code_lsu].filter(Boolean).join(" ");
   const line2 = `${fmtNum(r.koord_x)} ${fmtNum(r.koord_y)}`.trim();
   return (
     <div className="border-2 border-gray-900 rounded-sm bg-white flex flex-col items-center p-2">
@@ -142,6 +188,8 @@ export default function Dashboard() {
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [exporting, setExporting] = useState("");
   const [selected, setSelected] = useState(new Set());
   const [page, setPage] = useState(1);
@@ -183,6 +231,28 @@ export default function Dashboard() {
       return matchQ && matchK;
     });
   }, [records, search, kebunFilter]);
+
+  const breakdown = useMemo(() => {
+    const map = {};
+    for (const r of filtered) {
+      const k = r.kebun || "(Tanpa Kebun)";
+      if (!map[k]) map[k] = { kebun: k, total: 0, afd: {}, bloks: new Set() };
+      map[k].total += 1;
+      const a = r.afdeling || "-";
+      map[k].afd[a] = (map[k].afd[a] || 0) + 1;
+      if (r.blok) map[k].bloks.add(r.blok);
+    }
+    return Object.values(map)
+      .map((x) => ({
+        kebun: x.kebun,
+        total: x.total,
+        blokCount: x.bloks.size,
+        afdelings: Object.entries(x.afd)
+          .map(([afdeling, count]) => ({ afdeling, count }))
+          .sort((p, q) => String(p.afdeling).localeCompare(String(q.afdeling), "id", { numeric: true })),
+      }))
+      .sort((p, q) => q.total - p.total);
+  }, [filtered]);
 
   useEffect(() => {
     setPage(1);
@@ -234,6 +304,23 @@ export default function Dashboard() {
       load();
     } catch (e) {
       toast.error("Gagal menghapus");
+    }
+  };
+
+  const doBulkDelete = async () => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    setBulkDeleting(true);
+    try {
+      const res = await api.post("/records/delete-bulk", { ids });
+      toast.success(`${res.data?.deleted ?? ids.length} data dihapus`);
+      setSelected(new Set());
+      setBulkDeleteOpen(false);
+      load();
+    } catch (e) {
+      toast.error("Gagal menghapus data terpilih");
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -373,6 +460,36 @@ export default function Dashboard() {
           <StatCard icon={Leaf} label="Kebun" value={stats.total_kebun ?? 0} accent="#10B981" />
           <StatCard icon={Layers} label="Blok" value={stats.total_blok ?? 0} accent="#84CC16" />
           <StatCard icon={QrCode} label="Code LSU" value={stats.total_lsu ?? 0} accent="#F59E0B" />
+        </div>
+
+        {/* Ringkasan per Kebun & Afdeling */}
+        <div className="mb-8" data-testid="kebun-breakdown-section">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+                <Layers className="w-4 h-4 text-[#1B4D3E]" />
+              </div>
+              <div>
+                <h3 className="font-heading font-bold text-sm text-[#0B1D15] leading-none">
+                  Ringkasan per Kebun &amp; Afdeling
+                </h3>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {breakdown.length} kebun · jumlah data per afdeling
+                </p>
+              </div>
+            </div>
+          </div>
+          {breakdown.length === 0 ? (
+            <div className="bg-card rounded-2xl border p-8 text-center text-sm text-muted-foreground">
+              Belum ada data untuk diringkas.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {breakdown.map((item) => (
+                <KebunBreakdownCard key={item.kebun} item={item} />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Mini map koordinat */}
@@ -519,6 +636,16 @@ export default function Dashboard() {
                 className="border-white/30 text-white hover:bg-white/10 hover:text-white"
               >
                 <Download className="w-4 h-4 mr-1.5" /> Ekspor Excel Terpilih
+              </Button>
+              <Button
+                data-testid="delete-selected-button"
+                onClick={() => setBulkDeleteOpen(true)}
+                disabled={bulkDeleting}
+                size="sm"
+                variant="outline"
+                className="border-red-300/60 text-red-100 bg-red-500/20 hover:bg-red-500/30 hover:text-white"
+              >
+                <Trash2 className="w-4 h-4 mr-1.5" /> Hapus Terpilih
               </Button>
               <Button
                 data-testid="clear-selection-button"
@@ -830,6 +957,33 @@ export default function Dashboard() {
               className="bg-destructive hover:bg-destructive/90 text-white"
             >
               Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={(o) => !bulkDeleting && setBulkDeleteOpen(o)}>
+        <AlertDialogContent data-testid="bulk-delete-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus {selected.size} data terpilih?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selected.size} lokasi beserta QR-nya akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="bulk-delete-cancel-button" disabled={bulkDeleting}>
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                doBulkDelete();
+              }}
+              data-testid="bulk-delete-confirm-button"
+              disabled={bulkDeleting}
+              className="bg-destructive hover:bg-destructive/90 text-white"
+            >
+              {bulkDeleting ? "Menghapus..." : `Hapus ${selected.size} Data`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

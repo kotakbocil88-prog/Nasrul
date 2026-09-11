@@ -271,6 +271,15 @@ async def delete_all(user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 
+@api_router.post("/records/delete-bulk")
+async def delete_bulk(body: IdList, user: dict = Depends(get_current_user)):
+    if not body.ids:
+        return {"ok": True, "deleted": 0}
+    oids = [ObjectId(i) for i in body.ids]
+    res = await db.records.delete_many({"_id": {"$in": oids}})
+    return {"ok": True, "deleted": res.deleted_count}
+
+
 # ---------------------------------------------------------------- Excel
 @api_router.get("/records/template")
 async def download_template(user: dict = Depends(get_current_user)):
@@ -418,7 +427,11 @@ def build_labels_pdf(docs, size: str = "medium") -> io.BytesIO:
         _draw_qr(c, build_payload(d), qr_x, qr_y, qr_size)
         # Teks keterangan
         c.setFillColor(colors.HexColor("#111827"))
-        line1 = f"{d.get('kebun','')} {d.get('blok','')} {d.get('code_lsu','')}".strip()
+        line1 = " ".join(
+            str(d.get(k, "")).strip()
+            for k in ("kebun", "afdeling", "blok", "code_lsu")
+            if str(d.get(k, "")).strip()
+        )
         line2 = f"{fmt_num(d.get('koord_x'))} {fmt_num(d.get('koord_y'))}".strip()
         c.setFont("Helvetica-Bold", f1)
         c.drawCentredString(bx + bw / 2, divider_y - (f1 + 3), line1[:40])
