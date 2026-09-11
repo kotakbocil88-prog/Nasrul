@@ -63,6 +63,9 @@ import { ImportDialog } from "@/components/ImportDialog";
 import { useAuth } from "@/context/AuthContext";
 import api, { API } from "@/lib/api";
 
+const HERO_IMG =
+  "https://images.unsplash.com/photo-1540843650088-e05e97f1855b?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600";
+
 function StatCard({ icon: Icon, label, value, accent }) {
   return (
     <div
@@ -339,26 +342,34 @@ export default function Dashboard() {
       </header>
 
       {/* Hero welcome banner */}
-      <section className="hero-bg text-white">
-        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24 sm:pt-10 sm:pb-28">
+      <section className="relative hero-bg text-white">
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <img
+            src={HERO_IMG}
+            alt="Perkebunan"
+            className="w-full h-full object-cover opacity-30"
+            loading="eager"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#0B1D15] via-[#0B1D15]/85 to-[#0B1D15]/30" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0B1D15] via-transparent to-transparent" />
+        </div>
+        <div className="relative z-10 max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24 sm:pt-10 sm:pb-28">
           <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div className="fade-in">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 ring-1 ring-white/15 px-3 py-1 text-[11px] font-medium text-lime-200 mb-4">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 ring-1 ring-white/15 px-3 py-1 text-[11px] font-medium text-lime-200 mb-4 backdrop-blur-sm">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#84CC16] animate-pulse" />
                 Sistem Label QR Perkebunan
               </div>
-              <h1 className="font-heading text-3xl sm:text-4xl font-extrabold tracking-tight">
+              <h1 className="font-heading text-3xl sm:text-4xl font-extrabold tracking-tight drop-shadow-sm">
                 {greetingText()}, {user?.name?.split(" ")[0] || "Petugas"} 👋
               </h1>
-              <p className="text-white/60 mt-2 max-w-xl text-sm sm:text-base">
+              <p className="text-white/70 mt-2 max-w-xl text-sm sm:text-base">
                 Kelola data blok, hasilkan QR unik per lokasi, dan cetak label siap lapangan dalam satu tempat.
               </p>
             </div>
-            <div className="hidden lg:flex items-center gap-2 text-white/50 text-sm">
+            <div className="hidden lg:flex items-center gap-2 text-white/70 text-sm bg-white/10 ring-1 ring-white/15 rounded-full px-4 py-2 backdrop-blur-sm">
               <MapPin className="w-4 h-4 text-[#84CC16]" />
-              <span className="font-mono">
-                {stats.total_records ?? 0} lokasi terdaftar
-              </span>
+              <span className="font-mono">{stats.total_records ?? 0} lokasi terdaftar</span>
             </div>
           </div>
         </div>
@@ -371,6 +382,79 @@ export default function Dashboard() {
           <StatCard icon={Leaf} label="Kebun" value={stats.total_kebun ?? 0} accent="#10B981" />
           <StatCard icon={Layers} label="Blok" value={stats.total_blok ?? 0} accent="#84CC16" />
           <StatCard icon={QrCode} label="Code LSU" value={stats.total_lsu ?? 0} accent="#F59E0B" />
+        </div>
+
+        {/* Mini map koordinat */}
+        <div className="bg-card rounded-2xl border p-4 sm:p-5 mb-6" data-testid="mini-map-card">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+                <MapIcon className="w-4 h-4 text-[#10B981]" />
+              </div>
+              <div>
+                <h3 className="font-heading font-bold text-sm text-[#0B1D15] leading-none">Sebaran Koordinat</h3>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {filtered.length} titik · X (horizontal) vs Y (vertikal)
+                </p>
+              </div>
+            </div>
+            <Button
+              data-testid="expand-map-button"
+              onClick={() => setMapOpen(true)}
+              variant="ghost"
+              size="sm"
+              className="text-[#0F291E] hover:bg-emerald-50"
+            >
+              Perbesar
+            </Button>
+          </div>
+          <div className="h-52 w-full" data-testid="mini-coordinate-chart">
+            {filtered.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+                Belum ada titik koordinat untuk ditampilkan.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F0" />
+                  <XAxis
+                    type="number"
+                    dataKey="x"
+                    name="Koord X"
+                    domain={["auto", "auto"]}
+                    tick={{ fontSize: 10, fill: "#6B7280" }}
+                  />
+                  <YAxis
+                    type="number"
+                    dataKey="y"
+                    name="Koord Y"
+                    domain={["auto", "auto"]}
+                    tick={{ fontSize: 10, fill: "#6B7280" }}
+                    width={44}
+                  />
+                  <ZAxis range={[40, 40]} />
+                  <Tooltip
+                    cursor={{ strokeDasharray: "3 3" }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      return (
+                        <div className="bg-[#0F291E] text-white rounded-lg px-2.5 py-1.5 text-[11px] shadow-lg">
+                          <div className="font-semibold text-[#84CC16]">
+                            {d.kebun} · Blok {d.blok}
+                          </div>
+                          <div className="font-mono text-white/70">
+                            {d.x} , {d.y}
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Scatter data={filtered.map((r) => ({ ...r, x: r.koord_x, y: r.koord_y }))} fill="#10B981" />
+                </ScatterChart>
+              </ResponsiveContainer>
+            )}
+          </div>
         </div>
 
         {/* Controls */}
@@ -701,14 +785,25 @@ export default function Dashboard() {
                 </SelectContent>
               </Select>
             </div>
-            <Button
-              data-testid="download-labels-pdf-button"
-              onClick={() => exportPdf("labels", previewIds, labelSize)}
-              disabled={exporting === "labels" || exporting === "sel-labels" || previewDocs.length === 0}
-              className="sm:ml-auto bg-[#1B4D3E] hover:bg-[#0F291E] text-white h-9"
-            >
-              <Download className="w-4 h-4 mr-1.5" /> Unduh PDF
-            </Button>
+            <div className="flex items-center gap-2 sm:ml-auto">
+              <Button
+                data-testid="print-labels-button"
+                onClick={() => window.print()}
+                disabled={previewDocs.length === 0}
+                variant="outline"
+                className="h-9 border-[#84CC16]/50 text-[#4d7c0f] hover:bg-lime-50"
+              >
+                <Printer className="w-4 h-4 mr-1.5" /> Cetak
+              </Button>
+              <Button
+                data-testid="download-labels-pdf-button"
+                onClick={() => exportPdf("labels", previewIds, labelSize)}
+                disabled={exporting === "labels" || exporting === "sel-labels" || previewDocs.length === 0}
+                className="bg-[#1B4D3E] hover:bg-[#0F291E] text-white h-9"
+              >
+                <Download className="w-4 h-4 mr-1.5" /> Unduh PDF
+              </Button>
+            </div>
           </div>
 
           <div className="overflow-y-auto flex-1 -mx-1 px-1">
@@ -735,6 +830,23 @@ export default function Dashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Area khusus cetak (semua label) */}
+      {previewOpen && (
+        <div id="print-root" className="print-root">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: `repeat(${LABEL_SIZES[labelSize].cols}, minmax(0, 1fr))`,
+              gap: "8px",
+            }}
+          >
+            {previewDocs.map((r) => (
+              <LabelPreview key={`print-${r._id}`} r={r} size={labelSize} />
+            ))}
+          </div>
+        </div>
+      )}
 
       <Dialog open={mapOpen} onOpenChange={setMapOpen}>
         <DialogContent className="sm:max-w-3xl" data-testid="map-dialog">

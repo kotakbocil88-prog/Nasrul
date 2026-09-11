@@ -133,3 +133,18 @@ body {
     opacity: .10;
     filter: blur(4px);
 }
+
+/* ---- Print labels directly ---- */
+.print-root { display: none; }
+@media print {
+    body * { visibility: hidden !important; }
+    #print-root, #print-root * { visibility: visible !important; }
+    #print-root {
+        display: block !important;
+        position: absolute;
+        left: 0; top: 0;
+        width: 100%;
+        padding: 8mm;
+    }
+    @page { margin: 8mm; }
+}
