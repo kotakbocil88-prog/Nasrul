@@ -2,16 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
 import {
-  ScatterChart,
-  Scatter,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ZAxis,
-} from "recharts";
-import {
   Leaf,
   LogOut,
   Plus,
@@ -60,6 +50,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { RecordDialog } from "@/components/RecordDialog";
 import { ImportDialog } from "@/components/ImportDialog";
+import CoordinateMap from "@/components/CoordinateMap";
 import { useAuth } from "@/context/AuthContext";
 import api, { API } from "@/lib/api";
 
@@ -394,7 +385,7 @@ export default function Dashboard() {
               <div>
                 <h3 className="font-heading font-bold text-sm text-[#0B1D15] leading-none">Sebaran Koordinat</h3>
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  {filtered.length} titik · X (horizontal) vs Y (vertikal)
+                  {filtered.length} titik · peta OpenStreetMap · klik marker untuk detail
                 </p>
               </div>
             </div>
@@ -408,53 +399,7 @@ export default function Dashboard() {
               Perbesar
             </Button>
           </div>
-          <div className="h-52 w-full" data-testid="mini-coordinate-chart">
-            {filtered.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
-                Belum ada titik koordinat untuk ditampilkan.
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F0" />
-                  <XAxis
-                    type="number"
-                    dataKey="x"
-                    name="Koord X"
-                    domain={["auto", "auto"]}
-                    tick={{ fontSize: 10, fill: "#6B7280" }}
-                  />
-                  <YAxis
-                    type="number"
-                    dataKey="y"
-                    name="Koord Y"
-                    domain={["auto", "auto"]}
-                    tick={{ fontSize: 10, fill: "#6B7280" }}
-                    width={44}
-                  />
-                  <ZAxis range={[40, 40]} />
-                  <Tooltip
-                    cursor={{ strokeDasharray: "3 3" }}
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null;
-                      const d = payload[0].payload;
-                      return (
-                        <div className="bg-[#0F291E] text-white rounded-lg px-2.5 py-1.5 text-[11px] shadow-lg">
-                          <div className="font-semibold text-[#84CC16]">
-                            {d.kebun} · Blok {d.blok}
-                          </div>
-                          <div className="font-mono text-white/70">
-                            {d.x} , {d.y}
-                          </div>
-                        </div>
-                      );
-                    }}
-                  />
-                  <Scatter data={filtered.map((r) => ({ ...r, x: r.koord_x, y: r.koord_y }))} fill="#10B981" />
-                </ScatterChart>
-              </ResponsiveContainer>
-            )}
-          </div>
+          <CoordinateMap records={filtered} height={220} testId="mini-coordinate-chart" />
         </div>
 
         {/* Controls */}
@@ -831,7 +776,7 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Area khusus cetak (semua label) */}
+      {/* Area khusus cetak (batasi agar browser tidak berat) */}
       {previewOpen && (
         <div id="print-root" className="print-root">
           <div
@@ -841,10 +786,16 @@ export default function Dashboard() {
               gap: "8px",
             }}
           >
-            {previewDocs.map((r) => (
+            {previewDocs.slice(0, 200).map((r) => (
               <LabelPreview key={`print-${r._id}`} r={r} size={labelSize} />
             ))}
           </div>
+          {previewDocs.length > 200 && (
+            <p style={{ marginTop: "8px", fontSize: "11px", textAlign: "center" }}>
+              Menampilkan 200 label pertama untuk cetak langsung. Untuk mencetak seluruh {previewDocs.length} label,
+              gunakan tombol &quot;Unduh PDF&quot;.
+            </p>
+          )}
         </div>
       )}
 
@@ -855,56 +806,11 @@ export default function Dashboard() {
               <MapIcon className="w-5 h-5 text-[#10B981]" /> Peta Sebaran Koordinat
             </DialogTitle>
             <DialogDescription>
-              Visualisasi titik Koord X (horizontal) vs Koord Y (vertikal) untuk {filtered.length} lokasi
-              {kebunFilter !== "all" ? ` pada ${kebunFilter}` : ""}.
+              Peta OpenStreetMap menampilkan {filtered.length} lokasi
+              {kebunFilter !== "all" ? ` pada ${kebunFilter}` : ""}. Klik marker untuk melihat detail lokasi.
             </DialogDescription>
           </DialogHeader>
-          <div className="h-[420px] w-full" data-testid="coordinate-chart">
-            <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                <XAxis
-                  type="number"
-                  dataKey="x"
-                  name="Koord X"
-                  domain={["auto", "auto"]}
-                  tick={{ fontSize: 11, fill: "#4B5563" }}
-                  label={{ value: "Koord X", position: "insideBottom", offset: -8, fontSize: 12, fill: "#0F291E" }}
-                />
-                <YAxis
-                  type="number"
-                  dataKey="y"
-                  name="Koord Y"
-                  domain={["auto", "auto"]}
-                  tick={{ fontSize: 11, fill: "#4B5563" }}
-                  label={{ value: "Koord Y", angle: -90, position: "insideLeft", fontSize: 12, fill: "#0F291E" }}
-                />
-                <ZAxis range={[80, 80]} />
-                <Tooltip
-                  cursor={{ strokeDasharray: "3 3" }}
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null;
-                    const d = payload[0].payload;
-                    return (
-                      <div className="bg-[#0F291E] text-white rounded-lg px-3 py-2 text-xs shadow-lg">
-                        <div className="font-semibold text-[#84CC16]">
-                          {d.kebun} / Blok {d.blok}
-                        </div>
-                        <div className="font-mono mt-0.5">{d.code_lsu}</div>
-                        <div className="font-mono text-white/70 mt-0.5">
-                          X: {d.x} · Y: {d.y}
-                        </div>
-                      </div>
-                    );
-                  }}
-                />
-                <Scatter data={filtered.map((r) => ({ ...r, x: r.koord_x, y: r.koord_y }))} fill="#10B981" />
-              </ScatterChart>
-            </ResponsiveContainer>
-          </div>
-          {filtered.length === 0 && (
-            <p className="text-center text-sm text-muted-foreground -mt-4">Tidak ada data untuk ditampilkan.</p>
-          )}
+          <CoordinateMap records={filtered} height={480} testId="coordinate-chart" />
         </DialogContent>
       </Dialog>
 
