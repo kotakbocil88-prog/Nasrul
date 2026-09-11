@@ -1,0 +1,170 @@
+{
+  "app_name": "QC Estate Audit",
+  "personality": "5 Brutalist Mobile",
+  "personality_one_liner": "A high-contrast, rugged, terminal-like utility tool designed for harsh outdoor readability and precise agricultural data entry.",
+  "color": {
+    "surface": "#FFFFFF",
+    "onSurface": "#111827",
+    "surfaceSecondary": "#F3F4F6",
+    "onSurfaceSecondary": "#1F2937",
+    "surfaceTertiary": "#E5E7EB",
+    "onSurfaceTertiary": "#374151",
+    "surfaceInverse": "#111827",
+    "onSurfaceInverse": "#F9FAFB",
+    "brand": "#15803D",
+    "brandPrimary": "#15803D",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#BBF7D0",
+    "onBrandSecondary": "#14532D",
+    "brandTertiary": "#DCFCE7",
+    "onBrandTertiary": "#166534",
+    "success": "#059669",
+    "onSuccess": "#FFFFFF",
+    "warning": "#D97706",
+    "onWarning": "#FFFFFF",
+    "error": "#DC2626",
+    "onError": "#FFFFFF",
+    "info": "#4B5563",
+    "onInfo": "#FFFFFF",
+    "border": "#D1D5DB",
+    "borderStrong": "#111827",
+    "divider": "#E5E7EB",
+    "muted": "#6B7280",
+    "onBrand": "#FFFFFF"
+  },
+  "typography": {
+    "displayFontFamily": "Space Grotesk",
+    "textFontFamily": "JetBrains Mono",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Use rigid grids, edge-to-edge sections, sharp containers, and thick dividers instead of soft cards. Spacing must be dense but tap-friendly.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 0,
+    "md": 0,
+    "lg": 0,
+    "pill": 0
+  },
+  "shadow_tier": "0",
+  "navigation": "stack_only",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": "false",
+    "do's": [],
+    "dont's": [
+      "No blur or glass anywhere. Use solid colors and hard borders. Brutalist personality forbids glass."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "none",
+      "android": "none",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Login",
+      "purpose": "Simple email/password authentication screen for field workers.",
+      "states": {
+        "loading": "Solid monochrome spinner, disabled inputs.",
+        "empty": "N/A",
+        "error": "Hard red border on inputs, stark red text block below."
+      },
+      "layout": "Hero image (drone over field) covering top 40% with a gradient scrim. Bottom 60% contains sharp, full-width inputs with thick 2pt borders and JetBrains Mono labels. Solid heavy green CTA at the bottom."
+    },
+    {
+      "name": "Dashboard",
+      "purpose": "Entry point to start the 4 types of inspections and view recent submission history.",
+      "states": {
+        "loading": "Monochrome skeletal rectangles.",
+        "empty": "Empty state clipboard illustration, 'Belum ada data inspeksi', with 'Mulai Inspeksi' CTA.",
+        "error": "Error message in a high-contrast box with a 'Coba Lagi' button."
+      },
+      "layout": "Grid of 4 stark, edge-to-edge square buttons for the forms (QUALITY CONTROL LAND CLEARING, etc.) using brandSecondary backgrounds and thick borders. Below: A dense, list of recent inspections with monospaced timestamps and statuses. No soft shadows; use 2pt separators."
+    },
+    {
+      "name": "FormHeader",
+      "purpose": "Capture metadata for the inspection (Kebun, Afdeling, Blok, etc.).",
+      "states": {
+        "loading": "Spinner over disabled form.",
+        "empty": "N/A",
+        "error": "Validation errors highlighted with sharp red borders."
+      },
+      "layout": "Single column, one input per line. Labels above inputs. Dropdowns for predefined fields. Inputs have stark 2pt borders. Primary 'Lanjut ke Sampel' sticky CTA fixed at the bottom."
+    },
+    {
+      "name": "FormInspection",
+      "purpose": "Iterative data capture for sample lines and points with segmented choices and photos.",
+      "states": {
+        "loading": "Loading next sample point.",
+        "empty": "N/A",
+        "error": "Inline validation for missing mandatory photos or selections."
+      },
+      "layout": "Chunked by 'Jalur Sampel' and 'Titik Sampel'. Use edge-to-edge segmented controls (Standar / Tidak, Sudah / Belum) instead of dropdowns for speed. High-contrast active states (color flip, no press scale). A dedicated 'Ambil Foto' button with a camera icon per item. 'Keterangan' text area below. Sticky navigation for 'Sebelumnya' and 'Selanjutnya' at the bottom."
+    },
+    {
+      "name": "FormSignature",
+      "purpose": "Capture digital signatures of the inspector and the acknowledged party, then submit.",
+      "states": {
+        "loading": "Submitting form, full screen overlay.",
+        "empty": "N/A",
+        "error": "Signature pad bordered in red if missing."
+      },
+      "layout": "Two large, rigid signature canvas boxes with 'Hapus' (Clear) text links. Solid 'Simpan & Kirim' CTA pinned at the bottom. Utilitarian and legal document-like formatting."
+    },
+    {
+      "name": "HistoryDetail",
+      "purpose": "Review a submitted form and export it.",
+      "states": {
+        "loading": "Fetching details.",
+        "empty": "N/A",
+        "error": "Failed to load detail."
+      },
+      "layout": "Dense, read-only metadata block at the top. Below, a grid of sample points and thumbnail photos. Fixed bottom action bar with three stark buttons: 'Export PDF', 'Export Excel', and 'Share WA'."
+    }
+  ],
+  "images": {
+    "login_hero": {
+      "url": "https://images.unsplash.com/photo-1713952160156-bb59cac789a9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHwxfHxhZ3JpY3VsdHVyYWwlMjBkcm9uZSUyMGZpZWxkJTIwcGhvdG98ZW58MHx8fHwxNzg5MTExOTQyfDA&ixlib=rb-4.1.0&q=85",
+      "dark": "https://images.unsplash.com/photo-1713952160156-bb59cac789a9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHwxfHxhZ3JpY3VsdHVyYWwlMjBkcm9uZSUyMGZpZWxkJTIwcGhvdG98ZW58MHx8fHwxNzg5MTExOTQyfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Agricultural drone flying over a plantation field"
+    },
+    "empty_history": {
+      "url": "https://images.unsplash.com/photo-1568847811512-803314424fdc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwxfHxlbXB0eSUyMHN0YXRlJTIwaWxsdXN0cmF0aW9uJTIwY2xpcGJvYXJkfGVufDB8fHx8MTc4OTExMTk0Nnww&ixlib=rb-4.1.0&q=85",
+      "dark": "https://images.unsplash.com/photo-1568847811512-803314424fdc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwxfHxlbXB0eSUyMHN0YXRlJTIwaWxsdXN0cmF0aW9uJTIwY2xpcGJvYXJkfGVufDB8fHx8MTc4OTExMTk0Nnww&ixlib=rb-4.1.0&q=85",
+      "alt": "Empty clipboard on a textured surface"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Follow 5 Brutalist Mobile strictly: use rigid grids, edge-to-edge sections, sharp containers, and thick (2pt) dividers. NO BORDER RADIUS (set to 0 everywhere).",
+    "Color Palette: Use Forest Green (#15803D) as the primary brand color for CTAs and highlights. ALL BLUES ARE STRICTLY BANNED.",
+    "Typography: Use Space Grotesk for display headers and JetBrains Mono for form labels, metrics, timestamps, and input text. This enforces the 'audit/terminal' feel.",
+    "Navigation: Stick to stack_only navigation. Do not use a bottom tab bar, as the app is a linear data entry tool.",
+    "Forms: Optimize for thumb usage and speed. Use large edge-to-edge segmented controls for 'Standar / Tidak', 'Ada / Tidak' instead of dropdowns where possible.",
+    "Forms: Include 'sticky' CTAs at the bottom of scrollable views, specifically for 'Lanjut', 'Sebelumnya/Selanjutnya', and 'Simpan & Kirim'.",
+    "Signature Pad: Implement two dedicated canvas areas with explicit 'Hapus' (Clear) text buttons.",
+    "Images: Ensure text placed over the login_hero image has a gradient-to-dark scrim (top to bottom) for readability.",
+    "Shadows & Blur: Disable all shadows (shadow_tier 0) and glassmorphism. Use stark color contrast and borders to separate sections.",
+    "Ensure all text is in Bahasa Indonesia as requested."
+  ]
+}
