@@ -241,7 +241,7 @@ export default function Dashboard() {
               <Leaf className="w-5 h-5 text-[#0F291E]" />
             </div>
             <div>
-              <span className="font-heading font-extrabold text-base leading-none block">DATA EPCS TAGGING</span>
+              <span className="font-heading font-extrabold text-base leading-none block">DATA EQMS TAGGING</span>
               <span className="text-[11px] text-white/60">Manajemen Data & Label QR</span>
             </div>
           </div>

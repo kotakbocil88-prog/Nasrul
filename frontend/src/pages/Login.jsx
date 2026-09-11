@@ -48,7 +48,7 @@ export default function Login() {
             <div className="w-11 h-11 rounded-xl bg-[#84CC16] flex items-center justify-center">
               <Leaf className="w-6 h-6 text-[#0F291E]" />
             </div>
-            <span className="font-heading font-extrabold text-xl">DATA EPCS TAGGING</span>
+            <span className="font-heading font-extrabold text-xl">DATA EQMS TAGGING</span>
           </div>
           <div>
             <h1 className="font-heading text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight">
@@ -71,7 +71,7 @@ export default function Login() {
             <div className="w-10 h-10 rounded-xl bg-[#1B4D3E] flex items-center justify-center">
               <Leaf className="w-5 h-5 text-[#84CC16]" />
             </div>
-            <span className="font-heading font-extrabold text-lg">DATA EPCS TAGGING</span>
+            <span className="font-heading font-extrabold text-lg">DATA EQMS TAGGING</span>
           </div>
           <h2 className="font-heading text-2xl font-bold tracking-tight">Selamat Datang</h2>
           <p className="text-muted-foreground text-sm mt-1 mb-8">Masuk untuk mengelola data perkebunan Anda.</p>
