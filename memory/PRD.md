@@ -36,6 +36,8 @@ Kelola data: Kebun (teks), Afdeling (teks), Blok (teks), Code LSU (teks), Koord_
 - Rebrand (2025-07 v3): "DATA EPCS TAGGING" -> "DATA EQMS TAGGING" (Login desktop/mobile + Dashboard header).
 - Label PDF (build_labels_pdf) diubah agar sesuai contoh baru: kotak berbingkai solid + garis pembatas, baris1 tebal = "{Kebun} {Blok} {Code_LSU}" (spasi), baris2 tebal = "{Koord_X} {Koord_Y}" koma desimal. Tanpa Afdeling/ID di label. Verified via standalone gen (valid %PDF).
 - P1: Pagination / row-limit switcher for large datasets
+- DONE (2025-07 v4): Ekspor label PDF punya pilihan ukuran (small=24/hal, medium=15/hal, large=6/hal) via param size; dialog Pratinjau Cetak (LabelPreview) render QR client-side sebelum unduh; Peta Koordinat (ScatterChart) sudah ada sebelumnya. Backend tested 8/8 pass.
+- DONE (2025-07 v5): Redesign bagian atas Dashboard elegan — glass sticky nav, hero banner (hero-bg gradient + grid pattern) dengan sapaan waktu, kartu statistik overlap (stat-elegant: accent bar, glow, hover lift). CSS utilities di index.css. Frontend compiled successfully.
 - P1: Coordinate map visualizer (Koord X vs Y grid)
 - P2: Brute-force lockout, Mongo aggregation for stats, lifespan handlers
 - P2: Bulk delete, import validation preview table

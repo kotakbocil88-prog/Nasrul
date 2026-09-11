@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Backend API tests for DATA EPCS TAGGING (Kebun) app
-Regression test: Id Actual NOW INCLUDES Afdeling + QR payload = Id Actual + Excel export
+Testing: Label PDF export with size parameter (small/medium/large)
 """
 import requests
 import json
@@ -223,38 +223,171 @@ class TestSession:
         print("   so if create/update work correctly, import should too.")
         return True
     
-    def test_export_labels_pdf(self) -> bool:
-        """Test GET /api/records/export/labels - verify 200 with PDF content"""
-        print("\n=== TEST 5a: GET /api/records/export/labels - Export labels PDF ===")
+    def test_export_labels_pdf_size_small(self) -> bool:
+        """Test GET /api/records/export/labels?size=small - verify 200 with PDF content"""
+        print("\n=== TEST 5a: GET /api/records/export/labels?size=small - Export labels PDF (small) ===")
         
         try:
-            response = self.session.get(f"{BASE_URL}/records/export/labels")
+            response = self.session.get(f"{BASE_URL}/records/export/labels?size=small")
             print(f"Status: {response.status_code}")
             
             if response.status_code != 200:
-                print(f"❌ Failed to export labels: {response.text}")
+                print(f"❌ Failed to export labels (small): {response.text}")
                 return False
             
             content_type = response.headers.get("Content-Type", "")
             print(f"Content-Type: {content_type}")
             
             if "application/pdf" in content_type:
-                print(f"✅ PASS: Labels PDF exported successfully (size: {len(response.content)} bytes)")
-                return True
+                # Check if content starts with %PDF
+                if response.content[:4] == b'%PDF':
+                    print(f"✅ PASS: Labels PDF (small) exported successfully (size: {len(response.content)} bytes, starts with %PDF)")
+                    return True
+                else:
+                    print(f"❌ FAIL: Response doesn't start with %PDF")
+                    return False
             else:
                 print(f"❌ FAIL: Expected application/pdf, got {content_type}")
                 return False
             
         except Exception as e:
-            print(f"❌ Error exporting labels: {e}")
+            print(f"❌ Error exporting labels (small): {e}")
             return False
     
-    def test_export_labels_pdf_post(self) -> bool:
-        """Test POST /api/records/export/labels - Export selected labels PDF"""
-        print("\n=== TEST 5b: POST /api/records/export/labels - Export selected labels PDF ===")
+    def test_export_labels_pdf_size_medium(self) -> bool:
+        """Test GET /api/records/export/labels?size=medium - verify 200 with PDF content"""
+        print("\n=== TEST 5b: GET /api/records/export/labels?size=medium - Export labels PDF (medium) ===")
+        
+        try:
+            response = self.session.get(f"{BASE_URL}/records/export/labels?size=medium")
+            print(f"Status: {response.status_code}")
+            
+            if response.status_code != 200:
+                print(f"❌ Failed to export labels (medium): {response.text}")
+                return False
+            
+            content_type = response.headers.get("Content-Type", "")
+            print(f"Content-Type: {content_type}")
+            
+            if "application/pdf" in content_type:
+                if response.content[:4] == b'%PDF':
+                    print(f"✅ PASS: Labels PDF (medium) exported successfully (size: {len(response.content)} bytes, starts with %PDF)")
+                    return True
+                else:
+                    print(f"❌ FAIL: Response doesn't start with %PDF")
+                    return False
+            else:
+                print(f"❌ FAIL: Expected application/pdf, got {content_type}")
+                return False
+            
+        except Exception as e:
+            print(f"❌ Error exporting labels (medium): {e}")
+            return False
+    
+    def test_export_labels_pdf_size_large(self) -> bool:
+        """Test GET /api/records/export/labels?size=large - verify 200 with PDF content"""
+        print("\n=== TEST 5c: GET /api/records/export/labels?size=large - Export labels PDF (large) ===")
+        
+        try:
+            response = self.session.get(f"{BASE_URL}/records/export/labels?size=large")
+            print(f"Status: {response.status_code}")
+            
+            if response.status_code != 200:
+                print(f"❌ Failed to export labels (large): {response.text}")
+                return False
+            
+            content_type = response.headers.get("Content-Type", "")
+            print(f"Content-Type: {content_type}")
+            
+            if "application/pdf" in content_type:
+                if response.content[:4] == b'%PDF':
+                    print(f"✅ PASS: Labels PDF (large) exported successfully (size: {len(response.content)} bytes, starts with %PDF)")
+                    return True
+                else:
+                    print(f"❌ FAIL: Response doesn't start with %PDF")
+                    return False
+            else:
+                print(f"❌ FAIL: Expected application/pdf, got {content_type}")
+                return False
+            
+        except Exception as e:
+            print(f"❌ Error exporting labels (large): {e}")
+            return False
+    
+    def test_export_labels_pdf_no_size(self) -> bool:
+        """Test GET /api/records/export/labels (no size param) - should default to medium"""
+        print("\n=== TEST 5d: GET /api/records/export/labels (no size) - Should default to medium ===")
+        
+        try:
+            response = self.session.get(f"{BASE_URL}/records/export/labels")
+            print(f"Status: {response.status_code}")
+            
+            if response.status_code != 200:
+                print(f"❌ Failed to export labels (no size): {response.text}")
+                return False
+            
+            content_type = response.headers.get("Content-Type", "")
+            print(f"Content-Type: {content_type}")
+            
+            if "application/pdf" in content_type:
+                if response.content[:4] == b'%PDF':
+                    print(f"✅ PASS: Labels PDF (default=medium) exported successfully (size: {len(response.content)} bytes, starts with %PDF)")
+                    return True
+                else:
+                    print(f"❌ FAIL: Response doesn't start with %PDF")
+                    return False
+            else:
+                print(f"❌ FAIL: Expected application/pdf, got {content_type}")
+                return False
+            
+        except Exception as e:
+            print(f"❌ Error exporting labels (no size): {e}")
+            return False
+    
+    def test_export_labels_pdf_invalid_size(self) -> bool:
+        """Test GET /api/records/export/labels?size=bogus - should fallback to medium, NOT 500"""
+        print("\n=== TEST 5e: GET /api/records/export/labels?size=bogus - Should fallback to medium (NOT 500) ===")
+        
+        try:
+            response = self.session.get(f"{BASE_URL}/records/export/labels?size=bogus")
+            print(f"Status: {response.status_code}")
+            
+            if response.status_code == 500:
+                print(f"❌ FAIL: Got 500 error for invalid size (should fallback to medium)")
+                print(f"Response: {response.text}")
+                return False
+            
+            if response.status_code != 200:
+                print(f"❌ Failed to export labels (invalid size): {response.text}")
+                return False
+            
+            content_type = response.headers.get("Content-Type", "")
+            print(f"Content-Type: {content_type}")
+            
+            if "application/pdf" in content_type:
+                if response.content[:4] == b'%PDF':
+                    print(f"✅ PASS: Labels PDF with invalid size gracefully fell back to medium (size: {len(response.content)} bytes, starts with %PDF)")
+                    return True
+                else:
+                    print(f"❌ FAIL: Response doesn't start with %PDF")
+                    return False
+            else:
+                print(f"❌ FAIL: Expected application/pdf, got {content_type}")
+                return False
+            
+        except Exception as e:
+            print(f"❌ Error exporting labels (invalid size): {e}")
+            return False
+    
+    def test_export_labels_pdf_post_with_size(self) -> bool:
+        """Test POST /api/records/export/labels with size parameter"""
+        print("\n=== TEST 5f: POST /api/records/export/labels with size=large - Export selected labels PDF ===")
         
         # Use created record IDs if available
-        body = {"ids": self.created_record_ids[:1] if self.created_record_ids else []}
+        body = {
+            "ids": self.created_record_ids[:2] if len(self.created_record_ids) >= 2 else self.created_record_ids,
+            "size": "large"
+        }
         print(f"Request body: {json.dumps(body, indent=2)}")
         
         try:
@@ -262,21 +395,25 @@ class TestSession:
             print(f"Status: {response.status_code}")
             
             if response.status_code != 200:
-                print(f"❌ Failed to export selected labels: {response.text}")
+                print(f"❌ Failed to export selected labels with size: {response.text}")
                 return False
             
             content_type = response.headers.get("Content-Type", "")
             print(f"Content-Type: {content_type}")
             
             if "application/pdf" in content_type:
-                print(f"✅ PASS: Selected labels PDF exported successfully (size: {len(response.content)} bytes)")
-                return True
+                if response.content[:4] == b'%PDF':
+                    print(f"✅ PASS: Selected labels PDF (size=large) exported successfully (size: {len(response.content)} bytes, starts with %PDF)")
+                    return True
+                else:
+                    print(f"❌ FAIL: Response doesn't start with %PDF")
+                    return False
             else:
                 print(f"❌ FAIL: Expected application/pdf, got {content_type}")
                 return False
             
         except Exception as e:
-            print(f"❌ Error exporting selected labels: {e}")
+            print(f"❌ Error exporting selected labels with size: {e}")
             return False
     
     def test_export_table_pdf(self) -> bool:
@@ -443,8 +580,8 @@ class TestSession:
 
 def main():
     print("=" * 80)
-    print("DATA EPCS TAGGING (Kebun) - Backend API Regression Tests")
-    print("Testing: Id Actual includes Afdeling + QR payload = Id Actual + Excel export")
+    print("DATA EPCS TAGGING (Kebun) - Backend API Tests")
+    print("Testing: Label PDF export with size parameter (small/medium/large)")
     print("=" * 80)
     
     test_session = TestSession()
@@ -456,38 +593,66 @@ def main():
     
     results = {}
     
-    # Test 1: Create record with afdeling
-    record_id = test_session.test_create_record()
-    results["create_record"] = record_id is not None
+    # Ensure we have at least a few records for testing
+    print("\n=== SETUP: Ensuring test records exist ===")
+    # Create 3-4 test records
+    test_records = [
+        {"kebun": "KSL", "afdeling": "1", "blok": "PB36", "code_lsu": "TS09", "koord_x": 110.484093, "koord_y": 0.495337},
+        {"kebun": "KSL", "afdeling": "2", "blok": "OA11", "code_lsu": "TS01", "koord_x": 110.400113, "koord_y": 0.654521},
+        {"kebun": "KBN", "afdeling": "3", "blok": "PB12", "code_lsu": "TS05", "koord_x": 111.234567, "koord_y": 1.123456},
+    ]
     
-    if record_id:
-        # Test 2: Get records and verify id_actual includes afdeling
-        expected_id_actual = "KSL1OA11TS01110,4001130,654521"
-        results["get_records"] = test_session.test_get_records(expected_id_actual)
-        
-        # Test 3: Update record (change afdeling) and verify id_actual recomputes
-        results["update_record"] = test_session.test_update_record(record_id)
-    else:
-        results["get_records"] = False
-        results["update_record"] = False
+    for i, record_data in enumerate(test_records):
+        try:
+            response = test_session.session.post(f"{BASE_URL}/records", json=record_data)
+            if response.status_code == 200:
+                data = response.json()
+                record_id = data.get("_id")
+                test_session.created_record_ids.append(record_id)
+                print(f"✅ Created test record {i+1}: {record_id}")
+            else:
+                print(f"⚠️  Failed to create test record {i+1}: {response.status_code}")
+        except Exception as e:
+            print(f"⚠️  Error creating test record {i+1}: {e}")
     
-    # Test 4: Import (skipped)
-    results["import_records"] = test_session.test_import_records()
+    print(f"\nTotal test records created: {len(test_session.created_record_ids)}")
     
-    # Test 5: Export labels PDF
-    results["export_labels_get"] = test_session.test_export_labels_pdf()
-    results["export_labels_post"] = test_session.test_export_labels_pdf_post()
+    # Test 1: GET /api/records to verify records exist
+    try:
+        response = test_session.session.get(f"{BASE_URL}/records")
+        if response.status_code == 200:
+            records = response.json()
+            print(f"✅ Total records in database: {len(records)}")
+            if len(records) == 0:
+                print("⚠️  WARNING: No records in database, some tests may fail")
+        else:
+            print(f"⚠️  Failed to get records: {response.status_code}")
+    except Exception as e:
+        print(f"⚠️  Error getting records: {e}")
     
-    # Test 6: Export table PDF
-    results["export_table_get"] = test_session.test_export_table_pdf()
+    # Test 2: Export labels with size=small
+    results["export_labels_size_small"] = test_session.test_export_labels_pdf_size_small()
+    
+    # Test 3: Export labels with size=medium
+    results["export_labels_size_medium"] = test_session.test_export_labels_pdf_size_medium()
+    
+    # Test 4: Export labels with size=large
+    results["export_labels_size_large"] = test_session.test_export_labels_pdf_size_large()
+    
+    # Test 5: Export labels with no size (should default to medium)
+    results["export_labels_no_size"] = test_session.test_export_labels_pdf_no_size()
+    
+    # Test 6: Export labels with invalid size (should fallback to medium, NOT 500)
+    results["export_labels_invalid_size"] = test_session.test_export_labels_pdf_invalid_size()
+    
+    # Test 7: POST export labels with size parameter
+    results["export_labels_post_with_size"] = test_session.test_export_labels_pdf_post_with_size()
+    
+    # Test 8: Regression - POST export table (IdList model now has size field)
     results["export_table_post"] = test_session.test_export_table_pdf_post()
     
-    # Test 7: NEW Excel export
-    results["export_excel_get"] = test_session.test_export_excel_get()
+    # Test 9: Regression - POST export excel (IdList model now has size field)
     results["export_excel_post"] = test_session.test_export_excel_post()
-    
-    # Test 8: Stats
-    results["stats"] = test_session.test_stats()
     
     # Cleanup
     test_session.cleanup()

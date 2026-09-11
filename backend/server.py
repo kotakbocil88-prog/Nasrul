@@ -77,6 +77,7 @@ class ImportConfirm(BaseModel):
 
 class IdList(BaseModel):
     ids: List[str] = []
+    size: str = "medium"
 
 
 class UserRegister(BaseModel):
@@ -373,11 +374,18 @@ async def _fetch_docs(ids: Optional[List[str]]):
     return docs
 
 
-def build_labels_pdf(docs) -> io.BytesIO:
+LABEL_LAYOUTS = {
+    "small": (4, 6),   # label kecil, 24 per halaman
+    "medium": (3, 5),  # sedang, 15 per halaman (default)
+    "large": (2, 3),   # besar, 6 per halaman
+}
+
+
+def build_labels_pdf(docs, size: str = "medium") -> io.BytesIO:
     buf = io.BytesIO()
     c = pdf_canvas.Canvas(buf, pagesize=A4)
     pw, ph = A4
-    cols, rows_pp = 3, 5
+    cols, rows_pp = LABEL_LAYOUTS.get(size, LABEL_LAYOUTS["medium"])
     margin = 12 * mm
     cell_w = (pw - 2 * margin) / cols
     cell_h = (ph - 2 * margin) / rows_pp
@@ -397,7 +405,9 @@ def build_labels_pdf(docs) -> io.BytesIO:
         c.setLineWidth(1)
         c.rect(bx, by, bw, bh, stroke=1, fill=0)
         # Area teks di bawah (2 baris) dipisahkan garis horizontal
-        text_area_h = 12 * mm
+        text_area_h = {"small": 9 * mm, "medium": 12 * mm, "large": 16 * mm}.get(size, 12 * mm)
+        f1 = {"small": 8, "medium": 9, "large": 13}.get(size, 9)
+        f2 = {"small": 7, "medium": 8, "large": 11}.get(size, 8)
         divider_y = by + text_area_h
         c.setLineWidth(0.8)
         c.line(bx, divider_y, bx + bw, divider_y)
@@ -410,10 +420,10 @@ def build_labels_pdf(docs) -> io.BytesIO:
         c.setFillColor(colors.HexColor("#111827"))
         line1 = f"{d.get('kebun','')} {d.get('blok','')} {d.get('code_lsu','')}".strip()
         line2 = f"{fmt_num(d.get('koord_x'))} {fmt_num(d.get('koord_y'))}".strip()
-        c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(bx + bw / 2, by + text_area_h - 5 * mm, line1[:40])
-        c.setFont("Helvetica-Bold", 8)
-        c.drawCentredString(bx + bw / 2, by + 3 * mm, line2[:40])
+        c.setFont("Helvetica-Bold", f1)
+        c.drawCentredString(bx + bw / 2, divider_y - (f1 + 3), line1[:40])
+        c.setFont("Helvetica-Bold", f2)
+        c.drawCentredString(bx + bw / 2, by + 2.5 * mm, line2[:40])
     if not docs:
         c.setFont("Helvetica", 12)
         c.drawCentredString(pw / 2, ph / 2, "Tidak ada data")
@@ -469,15 +479,15 @@ def _pdf_response(buf, filename):
 
 
 @api_router.get("/records/export/labels")
-async def export_labels(user: dict = Depends(get_current_user)):
+async def export_labels(size: str = "medium", user: dict = Depends(get_current_user)):
     docs = await _fetch_docs(None)
-    return _pdf_response(build_labels_pdf(docs), "label_qr_kebun.pdf")
+    return _pdf_response(build_labels_pdf(docs, size), "label_qr_kebun.pdf")
 
 
 @api_router.post("/records/export/labels")
 async def export_labels_selected(body: IdList, user: dict = Depends(get_current_user)):
     docs = await _fetch_docs(body.ids)
-    return _pdf_response(build_labels_pdf(docs), "label_qr_kebun.pdf")
+    return _pdf_response(build_labels_pdf(docs, body.size), "label_qr_kebun.pdf")
 
 
 @api_router.get("/records/export/table")

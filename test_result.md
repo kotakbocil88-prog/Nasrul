@@ -104,6 +104,20 @@
 user_problem_statement: "Aplikasi Kebun LSU (rebranded DATA EPCS TAGGING). Perubahan: (1) Nama dashboard/login diganti jadi DATA EPCS TAGGING. (2) Id Actual bukan auto-increment lagi, melainkan gabungan Kebun+Blok+CodeLSU+Koord_X+Koord_Y (tanpa afdeling, tanpa pemisah). Koordinat pakai koma sebagai desimal. Contoh: Kebun=KSL, Blok=OA11, CodeLSU=TS01, X=110,400113, Y=0,654521 => KSLOA11TS01110,4001130,654521"
 
 backend:
+  - task: "Ekspor label PDF dengan pilihan ukuran (size=small|medium|large)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "build_labels_pdf(docs, size) sekarang menerima param size. LABEL_LAYOUTS: small=(4,6)=24/hal, medium=(3,5)=15/hal, large=(2,3)=6/hal. GET /api/records/export/labels?size=... dan POST body {ids, size}. Label baru: kotak berbingkai + garis pembatas, baris1='{kebun} {blok} {code_lsu}', baris2='{koord_x} {koord_y}' koma desimal. Perlu tes: GET labels?size=small/medium/large -> 200 application/pdf; POST labels {ids, size} -> 200; size invalid fallback ke medium; table & excel POST masih jalan (IdList kini punya field size default)."
+        - working: true
+          agent: "testing"
+          comment: "✅ ALL TESTS PASSED (8/8). Comprehensive testing completed: (1) GET /api/records/export/labels?size=small returned 200 with application/pdf, valid PDF starting with %PDF (18.7MB). (2) GET /api/records/export/labels?size=medium returned 200 with application/pdf, valid PDF (18.7MB). (3) GET /api/records/export/labels?size=large returned 200 with application/pdf, valid PDF (18.7MB). (4) GET /api/records/export/labels (no size param) returned 200 with application/pdf, correctly defaults to medium (18.7MB). (5) GET /api/records/export/labels?size=bogus returned 200 with application/pdf, gracefully fell back to medium (NOT 500 error) - excellent error handling. (6) POST /api/records/export/labels with body {ids:[...], size:'large'} returned 200 with application/pdf, valid PDF (13KB). (7) REGRESSION TEST: POST /api/records/export/table with {ids:[...]} returned 200 with application/pdf (7.7KB) - IdList model's new size field doesn't break existing endpoints. (8) REGRESSION TEST: POST /api/records/export/excel with {ids:[...]} returned 200 with correct content-type application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, valid xlsx file (5KB). No 500 errors encountered. All size parameters working correctly. Invalid size parameter handling is robust. Label PDF export feature fully functional."
   - task: "Id Actual sebagai gabungan data (bukan auto-increment)"
     implemented: true
     working: true
@@ -121,8 +135,8 @@ backend:
 
 metadata:
   created_by: "main_agent"
-  version: "1.2"
-  test_sequence: 3
+  version: "1.3"
+  test_sequence: 4
   run_ui: false
 
 test_plan:
@@ -173,3 +187,7 @@ agent_communication:
       message: "Test ulang: (1) POST /api/records body {kebun:KSL,afdeling:1,blok:OA11,code_lsu:TS01,koord_x:110.400113,koord_y:0.654521} -> id_actual & payload == 'KSL1OA11TS01110,4001130,654521'. (2) GET /api/records/export/excel -> 200 xlsx dgn header [Id Actual,Kebun,Afdeling,Blok,Code_LSU,Koord_X,Koord_Y]. (3) POST /api/records/export/excel {ids:[...]} -> 200 xlsx subset. (4) PDF labels & table masih 200. (5) GET /api/records id_actual mengandung afdeling."
     - agent: "testing"
       message: "Backend regression testing complete - ALL TESTS PASSED (11/11). ✅ Id Actual now correctly includes Afdeling in format Kebun+Afdeling+Blok+CodeLSU+KoordX+KoordY. ✅ QR payload field equals Id Actual exactly (verified in POST, GET, and PUT responses). ✅ PUT endpoint correctly recomputes id_actual and payload when afdeling changes. ✅ NEW Excel export endpoints working: GET/POST /api/records/export/excel return valid xlsx files with correct headers [Id Actual, Kebun, Afdeling, Blok, Code_LSU, Koord_X, Koord_Y] and comma decimal format for coordinates. ✅ Existing PDF exports still working (labels & table, both GET and POST). ✅ Stats endpoint working. No errors or issues found. All regression requirements verified successfully."
+    - agent: "main"
+      message: "Test label PDF export dengan size parameter: (1) GET /api/records/export/labels?size=small/medium/large -> 200 application/pdf. (2) GET /api/records/export/labels (no size) -> 200 default medium. (3) GET /api/records/export/labels?size=bogus -> 200 fallback medium (NOT 500). (4) POST /api/records/export/labels {ids:[...], size:'large'} -> 200 application/pdf. (5) Regression: POST /api/records/export/table {ids:[...]} -> 200 application/pdf. (6) Regression: POST /api/records/export/excel {ids:[...]} -> 200 xlsx. Verify IdList model dengan field size tidak break existing endpoints."
+    - agent: "testing"
+      message: "Backend testing complete - ALL TESTS PASSED (8/8). ✅ Label PDF export with size parameter fully functional: GET requests with size=small/medium/large all return 200 with valid PDF files (18.7MB each, starting with %PDF magic bytes). ✅ Default behavior working: GET without size parameter correctly defaults to medium. ✅ Error handling excellent: Invalid size parameter (size=bogus) gracefully falls back to medium, returns 200 (NOT 500 error). ✅ POST endpoint working: POST /api/records/export/labels with {ids:[...], size:'large'} returns 200 with valid PDF (13KB). ✅ Regression tests passed: POST /api/records/export/table returns 200 with PDF (7.7KB), POST /api/records/export/excel returns 200 with valid xlsx (5KB). ✅ IdList model's new size field (default='medium') doesn't break existing endpoints. No errors or issues found. Feature ready for production."

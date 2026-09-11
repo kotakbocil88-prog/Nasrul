@@ -65,20 +65,42 @@ import api, { API } from "@/lib/api";
 
 function StatCard({ icon: Icon, label, value, accent }) {
   return (
-    <div className="bg-card rounded-2xl border p-5 fade-in" data-testid={`stat-${label}`}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: accent + "22" }}>
+    <div
+      className="stat-elegant rounded-2xl border p-5 fade-in"
+      style={{ "--stat-accent": accent }}
+      data-testid={`stat-${label}`}
+    >
+      <div className="stat-glow" />
+      <div className="relative flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          {label}
+        </span>
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ring-1 ring-black/5"
+          style={{ background: accent + "1A" }}
+        >
           <Icon className="w-5 h-5" style={{ color: accent }} />
         </div>
       </div>
-      <p className="font-heading text-3xl font-extrabold mt-3 text-[#0B1D15]">{value}</p>
+      <p className="relative font-heading text-[2.1rem] leading-none font-extrabold mt-4 text-[#0B1D15] tracking-tight">
+        {value}
+      </p>
+      <div className="relative mt-3 h-1 w-full rounded-full bg-muted overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: "100%", background: accent, opacity: 0.35 }} />
+      </div>
     </div>
   );
 }
 
-function fmtNum(v) {
-  if (v === "" || v === null || v === undefined) return "";
+function greetingText() {
+  const h = new Date().getHours();
+  if (h < 11) return "Selamat pagi";
+  if (h < 15) return "Selamat siang";
+  if (h < 19) return "Selamat sore";
+  return "Selamat malam";
+}
+
+function fmtNum(v) {  if (v === "" || v === null || v === undefined) return "";
   const n = parseFloat(String(v).replace(",", "."));
   if (Number.isNaN(n)) return "";
   return String(n).replace(".", ",");
@@ -89,6 +111,29 @@ function payloadOf(r) {
   return (
     r.id_actual ||
     `${r.kebun ?? ""}${r.afdeling ?? ""}${r.blok ?? ""}${r.code_lsu ?? ""}${fmtNum(r.koord_x)}${fmtNum(r.koord_y)}`
+  );
+}
+
+const LABEL_SIZES = {
+  small: { name: "Kecil", perPage: 24, cols: 4, qr: 68, f1: "text-[11px]", f2: "text-[10px]" },
+  medium: { name: "Sedang", perPage: 15, cols: 3, qr: 96, f1: "text-sm", f2: "text-xs" },
+  large: { name: "Besar", perPage: 6, cols: 2, qr: 150, f1: "text-lg", f2: "text-base" },
+};
+
+function LabelPreview({ r, size }) {
+  const cfg = LABEL_SIZES[size] || LABEL_SIZES.medium;
+  const line1 = [r.kebun, r.blok, r.code_lsu].filter(Boolean).join(" ");
+  const line2 = `${fmtNum(r.koord_x)} ${fmtNum(r.koord_y)}`.trim();
+  return (
+    <div className="border-2 border-gray-900 rounded-sm bg-white flex flex-col items-center p-2">
+      <div className="flex-1 flex items-center justify-center py-2">
+        <QRCodeCanvas value={payloadOf(r)} size={cfg.qr} fgColor="#111827" level="M" />
+      </div>
+      <div className="w-full border-t border-gray-900 pt-1 text-center">
+        <div className={`font-bold text-gray-900 leading-tight ${cfg.f1}`}>{line1}</div>
+        <div className={`font-bold text-gray-900 leading-tight ${cfg.f2}`}>{line2}</div>
+      </div>
+    </div>
   );
 }
 
@@ -108,6 +153,9 @@ export default function Dashboard() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [mapOpen, setMapOpen] = useState(false);
+  const [labelSize, setLabelSize] = useState("medium");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewIds, setPreviewIds] = useState(null); // null = semua data, array = terpilih
 
   const load = async () => {
     setLoading(true);
@@ -205,7 +253,7 @@ export default function Dashboard() {
     a.click();
   };
 
-  const exportPdf = async (mode, ids = null) => {
+  const exportPdf = async (mode, ids = null, size = labelSize) => {
     const key = ids ? `sel-${mode}` : mode;
     setExporting(key);
     const meta = {
@@ -215,8 +263,15 @@ export default function Dashboard() {
     }[mode] || { file: "export", label: "File" };
     try {
       const res = ids
-        ? await api.post(`/records/export/${mode}`, { ids }, { responseType: "blob" })
-        : await api.get(`/records/export/${mode}`, { responseType: "blob" });
+        ? await api.post(
+            `/records/export/${mode}`,
+            mode === "labels" ? { ids, size } : { ids },
+            { responseType: "blob" }
+          )
+        : await api.get(
+            mode === "labels" ? `/records/export/${mode}?size=${size}` : `/records/export/${mode}`,
+            { responseType: "blob" }
+          );
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url;
@@ -231,24 +286,45 @@ export default function Dashboard() {
     }
   };
 
+  const openPreview = (ids = null) => {
+    setPreviewIds(ids);
+    setPreviewOpen(true);
+  };
+
+  const previewDocs = useMemo(() => {
+    if (previewIds) return records.filter((r) => previewIds.includes(r._id));
+    return records;
+  }, [records, previewIds]);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-30 leaf-bg text-white border-b border-[#274E3E]">
+      <header className="sticky top-0 z-30 glass-nav text-white border-b border-white/10">
         <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#84CC16] flex items-center justify-center">
+            <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-[#a3e635] to-[#65a30d] flex items-center justify-center shadow-lg shadow-lime-500/20 ring-1 ring-white/20">
               <Leaf className="w-5 h-5 text-[#0F291E]" />
             </div>
             <div>
-              <span className="font-heading font-extrabold text-base leading-none block">DATA EQMS TAGGING</span>
-              <span className="text-[11px] text-white/60">Manajemen Data & Label QR</span>
+              <span className="font-heading font-extrabold text-base leading-none block tracking-tight">
+                DATA EQMS TAGGING
+              </span>
+              <span className="text-[11px] text-white/55">Manajemen Data &amp; Label QR</span>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden sm:block text-sm text-white/70" data-testid="current-user">
-              {user?.name} · {user?.email}
-            </span>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div
+              className="hidden sm:flex items-center gap-2.5 pl-1 pr-3 py-1 rounded-full bg-white/10 ring-1 ring-white/10"
+              data-testid="current-user"
+            >
+              <div className="w-7 h-7 rounded-full bg-[#84CC16] text-[#0F291E] flex items-center justify-center text-xs font-bold uppercase">
+                {(user?.name || user?.email || "U").charAt(0)}
+              </div>
+              <div className="leading-tight">
+                <div className="text-xs font-semibold">{user?.name}</div>
+                <div className="text-[10px] text-white/50">{user?.email}</div>
+              </div>
+            </div>
             <Button
               data-testid="logout-button"
               onClick={logout}
@@ -262,9 +338,35 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {/* Hero welcome banner */}
+      <section className="hero-bg text-white">
+        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24 sm:pt-10 sm:pb-28">
+          <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+            <div className="fade-in">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 ring-1 ring-white/15 px-3 py-1 text-[11px] font-medium text-lime-200 mb-4">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#84CC16] animate-pulse" />
+                Sistem Label QR Perkebunan
+              </div>
+              <h1 className="font-heading text-3xl sm:text-4xl font-extrabold tracking-tight">
+                {greetingText()}, {user?.name?.split(" ")[0] || "Petugas"} 👋
+              </h1>
+              <p className="text-white/60 mt-2 max-w-xl text-sm sm:text-base">
+                Kelola data blok, hasilkan QR unik per lokasi, dan cetak label siap lapangan dalam satu tempat.
+              </p>
+            </div>
+            <div className="hidden lg:flex items-center gap-2 text-white/50 text-sm">
+              <MapPin className="w-4 h-4 text-[#84CC16]" />
+              <span className="font-mono">
+                {stats.total_records ?? 0} lokasi terdaftar
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <main className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 pb-8 sm:pb-10">
+        {/* Stats (overlapping the hero banner) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 -mt-16 sm:-mt-20 mb-8 relative z-10">
           <StatCard icon={MapPin} label="Total Data" value={stats.total_records ?? 0} accent="#1B4D3E" />
           <StatCard icon={Leaf} label="Kebun" value={stats.total_kebun ?? 0} accent="#10B981" />
           <StatCard icon={Layers} label="Blok" value={stats.total_blok ?? 0} accent="#84CC16" />
@@ -315,12 +417,11 @@ export default function Dashboard() {
               </Button>
               <Button
                 data-testid="export-labels-button"
-                onClick={() => exportPdf("labels")}
-                disabled={exporting === "labels"}
+                onClick={() => openPreview(null)}
                 variant="outline"
                 className="h-10 border-[#84CC16]/50 text-[#4d7c0f] hover:bg-lime-50"
               >
-                <Tags className="w-4 h-4 mr-1.5" /> PDF Label
+                <Tags className="w-4 h-4 mr-1.5" /> Pratinjau & Cetak Label
               </Button>
               <Button
                 data-testid="export-table-button"
@@ -364,12 +465,11 @@ export default function Dashboard() {
             <div className="flex flex-wrap gap-2">
               <Button
                 data-testid="print-selected-labels-button"
-                onClick={() => exportPdf("labels", [...selected])}
-                disabled={exporting === "sel-labels"}
+                onClick={() => openPreview([...selected])}
                 size="sm"
                 className="bg-[#84CC16] hover:bg-[#65a30d] text-[#0F291E] font-semibold"
               >
-                <Printer className="w-4 h-4 mr-1.5" /> Cetak Label Terpilih
+                <Printer className="w-4 h-4 mr-1.5" /> Pratinjau Label Terpilih
               </Button>
               <Button
                 data-testid="print-selected-table-button"
@@ -571,6 +671,70 @@ export default function Dashboard() {
 
       <RecordDialog open={recordOpen} onOpenChange={setRecordOpen} record={editing} onSaved={load} />
       <ImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={load} />
+
+      {/* Pratinjau & Cetak Label */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[92vh] flex flex-col" data-testid="preview-dialog">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-xl flex items-center gap-2">
+              <Tags className="w-5 h-5 text-[#4d7c0f]" /> Pratinjau Label QR
+            </DialogTitle>
+            <DialogDescription>
+              {previewIds ? `${previewDocs.length} lokasi terpilih` : `Semua data (${previewDocs.length} lokasi)`} ·
+              Ukuran {LABEL_SIZES[labelSize].name} ({LABEL_SIZES[labelSize].perPage} label / halaman A4)
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-y py-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Ukuran label:</span>
+              <Select value={labelSize} onValueChange={setLabelSize}>
+                <SelectTrigger className="h-9 w-44" data-testid="label-size-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(LABEL_SIZES).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>
+                      {v.name} — {v.perPage} / halaman
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              data-testid="download-labels-pdf-button"
+              onClick={() => exportPdf("labels", previewIds, labelSize)}
+              disabled={exporting === "labels" || exporting === "sel-labels" || previewDocs.length === 0}
+              className="sm:ml-auto bg-[#1B4D3E] hover:bg-[#0F291E] text-white h-9"
+            >
+              <Download className="w-4 h-4 mr-1.5" /> Unduh PDF
+            </Button>
+          </div>
+
+          <div className="overflow-y-auto flex-1 -mx-1 px-1">
+            {previewDocs.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-10">Tidak ada data untuk dicetak.</p>
+            ) : (
+              <>
+                <div
+                  className="grid gap-3 py-2"
+                  style={{ gridTemplateColumns: `repeat(${LABEL_SIZES[labelSize].cols}, minmax(0, 1fr))` }}
+                  data-testid="preview-grid"
+                >
+                  {previewDocs.slice(0, 60).map((r) => (
+                    <LabelPreview key={r._id} r={r} size={labelSize} />
+                  ))}
+                </div>
+                {previewDocs.length > 60 && (
+                  <p className="text-center text-xs text-muted-foreground py-2">
+                    Menampilkan 60 dari {previewDocs.length} label. Semua {previewDocs.length} label akan disertakan di PDF.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={mapOpen} onOpenChange={setMapOpen}>
         <DialogContent className="sm:max-w-3xl" data-testid="map-dialog">
