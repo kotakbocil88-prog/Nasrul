@@ -245,6 +245,8 @@ async def stats(user: dict = Depends(get_current_user)):
 async def create_record(body: RecordInput, user: dict = Depends(get_current_user)):
     doc = body.model_dump()
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    if _is_tagged(doc):
+        doc["tagged_at"] = doc["created_at"]
     res = await db.records.insert_one(doc)
     saved = await db.records.find_one({"_id": res.inserted_id})
     return serialize(saved)
@@ -252,10 +254,18 @@ async def create_record(body: RecordInput, user: dict = Depends(get_current_user
 
 @api_router.put("/records/{rid}")
 async def update_record(rid: str, body: RecordInput, user: dict = Depends(get_current_user)):
-    await db.records.update_one({"_id": ObjectId(rid)}, {"$set": body.model_dump()})
-    saved = await db.records.find_one({"_id": ObjectId(rid)})
-    if not saved:
+    existing = await db.records.find_one({"_id": ObjectId(rid)})
+    if not existing:
         raise HTTPException(status_code=404, detail="Data tidak ditemukan")
+    new_data = body.model_dump()
+    update = {"$set": dict(new_data)}
+    now_tagged = _is_tagged(new_data)
+    if now_tagged and not existing.get("tagged_at"):
+        update["$set"]["tagged_at"] = datetime.now(timezone.utc).isoformat()
+    elif not now_tagged and existing.get("tagged_at"):
+        update["$unset"] = {"tagged_at": ""}
+    await db.records.update_one({"_id": ObjectId(rid)}, update)
+    saved = await db.records.find_one({"_id": ObjectId(rid)})
     return serialize(saved)
 
 
@@ -360,6 +370,8 @@ async def import_confirm(body: ImportConfirm, user: dict = Depends(get_current_u
     for r in body.rows:
         doc = r.model_dump()
         doc["created_at"] = datetime.now(timezone.utc).isoformat()
+        if _is_tagged(doc):
+            doc["tagged_at"] = doc["created_at"]
         await db.records.insert_one(doc)
         inserted += 1
     return {"inserted": inserted}
@@ -605,6 +617,54 @@ async def export_untagged(user: dict = Depends(get_current_user)):
     return _pdf_response(build_untagged_pdf(untagged), "daftar_belum_tagging.pdf")
 
 
+def build_untagged_excel(docs) -> io.BytesIO:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Belum di-tagging"
+    headers = ["No", "Kebun", "Afdeling", "Blok", "Code_LSU", "Koord_X", "Koord_Y", "Keterangan"]
+    ws.append(headers)
+    for i, d in enumerate(docs, 1):
+        ws.append([
+            i, d.get("kebun", ""), d.get("afdeling", ""), d.get("blok", ""),
+            d.get("code_lsu", ""), "", "", "Belum di-tagging",
+        ])
+    widths = [6, 16, 12, 12, 14, 16, 16, 18]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+    for cell in ws[1]:
+        cell.font = openpyxl.styles.Font(bold=True)
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return buf
+
+
+@api_router.get("/records/tagging-progress")
+async def tagging_progress(user: dict = Depends(get_current_user)):
+    """Perkembangan jumlah lokasi ter-tagging dari waktu ke waktu (harian, kumulatif)."""
+    docs = await db.records.find().to_list(20000)
+    per_day = {}
+    tagged_total = 0
+    for d in docs:
+        if not _is_tagged(d):
+            continue
+        tagged_total += 1
+        ts = d.get("tagged_at") or d.get("created_at") or ""
+        day = str(ts)[:10]
+        if len(day) != 10:
+            continue
+        per_day[day] = per_day.get(day, 0) + 1
+    series = []
+    cumulative = 0
+    for day in sorted(per_day.keys()):
+        cumulative += per_day[day]
+        series.append({"date": day, "count": per_day[day], "cumulative": cumulative})
+    return {
+        "series": series,
+        "tagged_total": tagged_total,
+        "untagged_total": len(docs) - tagged_total,
+        "total": len(docs),
+    }
+
+
 def build_excel(docs) -> io.BytesIO:
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -644,6 +704,13 @@ async def export_excel(user: dict = Depends(get_current_user)):
 async def export_excel_selected(body: IdList, user: dict = Depends(get_current_user)):
     docs = await _fetch_docs(body.ids)
     return _excel_response(build_excel(docs), "data_kebun.xlsx")
+
+
+@api_router.get("/records/export/untagged-excel")
+async def export_untagged_excel(user: dict = Depends(get_current_user)):
+    docs = await _fetch_docs(None)
+    untagged = [d for d in docs if not _is_tagged(d)]
+    return _excel_response(build_untagged_excel(untagged), "daftar_belum_tagging.xlsx")
 
 
 app.include_router(api_router)

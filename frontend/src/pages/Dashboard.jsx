@@ -22,6 +22,7 @@ import {
   QrCode,
   CheckCircle2,
   AlertCircle,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,15 @@ import {
 import { RecordDialog } from "@/components/RecordDialog";
 import { ImportDialog } from "@/components/ImportDialog";
 import CoordinateMap from "@/components/CoordinateMap";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RTooltip,
+  ResponsiveContainer,
+} from "recharts";
 import { useAuth } from "@/context/AuthContext";
 import api, { API } from "@/lib/api";
 
@@ -209,9 +219,11 @@ export default function Dashboard() {
   const { user, logout } = useAuth();
   const [records, setRecords] = useState([]);
   const [stats, setStats] = useState({});
+  const [progress, setProgress] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [kebunFilter, setKebunFilter] = useState("all");
+  const [afdelingFilter, setAfdelingFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all"); // all | tagged | untagged
   const [recordOpen, setRecordOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -231,9 +243,14 @@ export default function Dashboard() {
   const load = async () => {
     setLoading(true);
     try {
-      const [r, s] = await Promise.all([api.get("/records"), api.get("/records/stats")]);
+      const [r, s, p] = await Promise.all([
+        api.get("/records"),
+        api.get("/records/stats"),
+        api.get("/records/tagging-progress"),
+      ]);
       setRecords(r.data);
       setStats(s.data);
+      setProgress(p.data);
     } catch (e) {
       toast.error("Gagal memuat data");
     } finally {
@@ -250,6 +267,13 @@ export default function Dashboard() {
     [records]
   );
 
+  const afdelingOptions = useMemo(() => {
+    const src = kebunFilter === "all" ? records : records.filter((r) => r.kebun === kebunFilter);
+    return [...new Set(src.map((r) => r.afdeling).filter(Boolean))].sort((a, b) =>
+      String(a).localeCompare(String(b), "id", { numeric: true })
+    );
+  }, [records, kebunFilter]);
+
   const baseFiltered = useMemo(() => {
     const q = search.toLowerCase().trim();
     return records.filter((r) => {
@@ -257,9 +281,10 @@ export default function Dashboard() {
         !q ||
         [r.kebun, r.afdeling, r.blok, r.code_lsu].some((v) => (v || "").toLowerCase().includes(q));
       const matchK = kebunFilter === "all" || r.kebun === kebunFilter;
-      return matchQ && matchK;
+      const matchA = afdelingFilter === "all" || String(r.afdeling) === String(afdelingFilter);
+      return matchQ && matchK && matchA;
     });
-  }, [records, search, kebunFilter]);
+  }, [records, search, kebunFilter, afdelingFilter]);
 
   const taggingStats = useMemo(() => {
     let tagged = 0;
@@ -278,6 +303,14 @@ export default function Dashboard() {
       document.querySelector('[data-testid="records-table"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 100);
   };
+
+  const progressData = useMemo(() => {
+    const s = progress?.series || [];
+    return s.map((d) => ({
+      ...d,
+      label: `${d.date.slice(8, 10)}/${d.date.slice(5, 7)}`,
+    }));
+  }, [progress]);
 
   const filtered = useMemo(() => {
     if (statusFilter === "tagged") return baseFiltered.filter((r) => isTagged(r));
@@ -320,7 +353,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, kebunFilter, statusFilter, pageSize]);
+  }, [search, kebunFilter, afdelingFilter, statusFilter, pageSize]);
+
+  // Reset filter afdeling bila kebun berubah dan afdeling tak lagi tersedia
+  useEffect(() => {
+    if (afdelingFilter !== "all" && !afdelingOptions.map(String).includes(String(afdelingFilter))) {
+      setAfdelingFilter("all");
+    }
+  }, [afdelingOptions, afdelingFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -405,6 +445,7 @@ export default function Dashboard() {
       labels: { file: "label_qr_kebun.pdf", label: "PDF" },
       table: { file: "laporan_tabel_kebun.pdf", label: "PDF" },
       untagged: { file: "daftar_belum_tagging.pdf", label: "PDF" },
+      "untagged-excel": { file: "daftar_belum_tagging.xlsx", label: "Excel" },
       excel: { file: "data_kebun.xlsx", label: "Excel" },
     }[mode] || { file: "export", label: "File" };
     try {
@@ -641,6 +682,65 @@ export default function Dashboard() {
           )}
         </div>
 
+        {/* Progres Harian tagging */}
+        <div className="bg-card rounded-2xl border p-4 sm:p-5 mb-6" data-testid="progress-chart-card">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+                <TrendingUp className="w-4 h-4 text-[#10B981]" />
+              </div>
+              <div>
+                <h3 className="font-heading font-bold text-sm text-[#0B1D15] leading-none">Progres Harian Tagging</h3>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Perkembangan jumlah lokasi ter-tagging dari waktu ke waktu
+                </p>
+              </div>
+            </div>
+            {progress && (
+              <div className="text-right hidden sm:block">
+                <div className="font-heading text-xl font-extrabold text-emerald-700 leading-none">
+                  {progress.tagged_total.toLocaleString("id-ID")}
+                </div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">total ter-tagging</div>
+              </div>
+            )}
+          </div>
+          {progressData.length === 0 ? (
+            <div className="flex items-center justify-center h-[220px] text-sm text-muted-foreground bg-muted/30 rounded-xl">
+              Belum ada data tagging untuk ditampilkan.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={progressData} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="tagGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" allowDecimals={false} width={48} />
+                <RTooltip
+                  formatter={(value, name) => [
+                    Number(value).toLocaleString("id-ID"),
+                    name === "cumulative" ? "Total ter-tagging" : "Ditambahkan",
+                  ]}
+                  labelFormatter={(l) => `Tanggal ${l}`}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="cumulative"
+                  stroke="#059669"
+                  strokeWidth={2.5}
+                  fill="url(#tagGrad)"
+                  dot={progressData.length < 40 ? { r: 3, fill: "#059669" } : false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
         {/* Mini map koordinat */}
         <div className="bg-card rounded-2xl border p-4 sm:p-5 mb-6" data-testid="mini-map-card">
           <div className="flex items-center justify-between mb-3">
@@ -690,6 +790,19 @@ export default function Dashboard() {
                 {kebunOptions.map((k) => (
                   <SelectItem key={k} value={k}>
                     {k}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={afdelingFilter} onValueChange={setAfdelingFilter}>
+              <SelectTrigger className="w-full lg:w-44 h-10" data-testid="afdeling-filter">
+                <SelectValue placeholder="Semua Afdeling" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Afdeling</SelectItem>
+                {afdelingOptions.map((a) => (
+                  <SelectItem key={a} value={String(a)}>
+                    Afdeling {a}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -767,6 +880,15 @@ export default function Dashboard() {
                 className="h-10 border-amber-400/60 text-amber-700 hover:bg-amber-50"
               >
                 <AlertCircle className="w-4 h-4 mr-1.5" /> Daftar Belum
+              </Button>
+              <Button
+                data-testid="export-untagged-excel-button"
+                onClick={() => exportPdf("untagged-excel")}
+                disabled={exporting === "untagged-excel"}
+                variant="outline"
+                className="h-10 border-amber-400/60 text-amber-700 hover:bg-amber-50"
+              >
+                <Download className="w-4 h-4 mr-1.5" /> Daftar Belum (Excel)
               </Button>
               <Button
                 data-testid="export-excel-button"
