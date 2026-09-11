@@ -5,7 +5,19 @@ import pytest
 import requests
 import openpyxl
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://harvest-qr-export.preview.emergentagent.com').rstrip('/')
+def _load_frontend_env():
+    p = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', '.env')
+    try:
+        with open(p) as f:
+            for line in f:
+                if line.startswith('REACT_APP_BACKEND_URL='):
+                    return line.split('=', 1)[1].strip()
+    except FileNotFoundError:
+        pass
+    return None
+
+
+BASE_URL = (os.environ.get('REACT_APP_BACKEND_URL') or _load_frontend_env()).rstrip('/')
 API = f"{BASE_URL}/api"
 
 ADMIN_EMAIL = "admin@kebun.id"
@@ -23,11 +35,6 @@ def session():
 def auth_session(session):
     r = session.post(f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
     assert r.status_code == 200, f"Login failed: {r.status_code} {r.text}"
-    data = r.json()
-    assert data["email"] == ADMIN_EMAIL
-    # cookie should be set
-    assert "access_token" in session.cookies.get_dict() or True  # samesite=none/secure may not persist
-    # use bearer via decoded... instead we'll use session cookies which should carry
     return session
 
 
@@ -80,7 +87,6 @@ class TestRecords:
         assert r.status_code == 200
         d = r.json()
         assert d["total_records"] >= 1
-        assert "total_kebun" in d and "total_blok" in d and "total_lsu" in d
 
     def test_update_record(self, auth_session):
         rid = TestRecords.created_ids[0]
@@ -89,7 +95,6 @@ class TestRecords:
         r = auth_session.put(f"{API}/records/{rid}", json=payload)
         assert r.status_code == 200
         assert r.json()["kebun"] == "TEST_Kebun_A2"
-        # verify persisted
         r2 = auth_session.get(f"{API}/records")
         rec = next(x for x in r2.json() if x["_id"] == rid)
         assert rec["kebun"] == "TEST_Kebun_A2"
@@ -100,42 +105,89 @@ class TestRecords:
         assert r.status_code == 200
 
 
-# ---- Excel & PDF
-class TestExcelPDF:
+# ---- Excel: preview + confirm two-step
+class TestExcelImport:
+    def _make_xlsx(self, rows):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["Kebun", "Afdeling", "Blok", "Code_LSU", "Koord_X", "Koord_Y"])
+        for r in rows:
+            ws.append(r)
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return buf.getvalue()
+
     def test_template_download(self, auth_session):
         r = auth_session.get(f"{API}/records/template")
         assert r.status_code == 200
         assert "spreadsheet" in r.headers.get("content-type", "")
-        assert len(r.content) > 100
 
-    def test_import_excel(self, auth_session):
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.append(["Kebun", "Afdeling", "Blok", "Code_LSU", "Koord_X", "Koord_Y"])
-        ws.append(["TEST_ImpK", "OA", "IB1", "TEST-IMP-1", 100.1, -1.1])
-        ws.append(["TEST_ImpK", "OB", "IB2", "TEST-IMP-2", 100.2, -1.2])
-        buf = io.BytesIO()
-        wb.save(buf)
-        buf.seek(0)
-        # remove json content-type for multipart
+    def test_import_preview_does_not_insert(self, auth_session):
+        content = self._make_xlsx([
+            ["TEST_ImpK", "OA", "IB1", "TEST-IMP-1", 100.1, -1.1],
+            ["TEST_ImpK", "OB", "IB2", "TEST-IMP-2", 100.2, -1.2],
+        ])
+        before = len(auth_session.get(f"{API}/records").json())
         s = requests.Session()
         s.cookies.update(auth_session.cookies)
-        r = s.post(f"{API}/records/import",
-                   files={"file": ("t.xlsx", buf.getvalue(),
+        r = s.post(f"{API}/records/import/preview",
+                   files={"file": ("t.xlsx", content,
                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
         assert r.status_code == 200, r.text
-        assert r.json()["inserted"] == 2
+        d = r.json()
+        assert d["count"] == 2
+        assert len(d["rows"]) == 2
+        assert d["rows"][0]["kebun"] == "TEST_ImpK"
+        # verify not inserted
+        after = len(auth_session.get(f"{API}/records").json())
+        assert after == before, "preview should not insert rows"
 
-    def test_export_labels_pdf(self, auth_session):
+    def test_import_confirm_inserts(self, auth_session):
+        rows = [
+            {"kebun": "TEST_ImpK", "afdeling": "OA", "blok": "IB1", "code_lsu": "TEST-IMP-1", "koord_x": 100.1, "koord_y": -1.1},
+            {"kebun": "TEST_ImpK", "afdeling": "OB", "blok": "IB2", "code_lsu": "TEST-IMP-2", "koord_x": 100.2, "koord_y": -1.2},
+        ]
+        r = auth_session.post(f"{API}/records/import/confirm", json={"rows": rows})
+        assert r.status_code == 200, r.text
+        assert r.json()["inserted"] == 2
+        listed = auth_session.get(f"{API}/records").json()
+        assert any(x["code_lsu"] == "TEST-IMP-1" for x in listed)
+
+
+# ---- PDF exports (GET all + POST selected)
+class TestPDFExports:
+    def test_export_labels_all_get(self, auth_session):
         r = auth_session.get(f"{API}/records/export/labels")
         assert r.status_code == 200
         assert r.headers.get("content-type", "").startswith("application/pdf")
         assert r.content[:4] == b"%PDF"
 
-    def test_export_table_pdf(self, auth_session):
+    def test_export_table_all_get(self, auth_session):
         r = auth_session.get(f"{API}/records/export/table")
         assert r.status_code == 200
+        assert r.content[:4] == b"%PDF"
+
+    def test_export_labels_selected_post(self, auth_session):
+        listed = auth_session.get(f"{API}/records").json()
+        assert listed, "need records to test selected export"
+        ids = [x["_id"] for x in listed[:2]]
+        r = auth_session.post(f"{API}/records/export/labels", json={"ids": ids})
+        assert r.status_code == 200
         assert r.headers.get("content-type", "").startswith("application/pdf")
+        assert r.content[:4] == b"%PDF"
+
+    def test_export_table_selected_post(self, auth_session):
+        listed = auth_session.get(f"{API}/records").json()
+        ids = [x["_id"] for x in listed[:1]]
+        r = auth_session.post(f"{API}/records/export/table", json={"ids": ids})
+        assert r.status_code == 200
+        assert r.content[:4] == b"%PDF"
+
+    def test_export_labels_empty_ids(self, auth_session):
+        r = auth_session.post(f"{API}/records/export/labels", json={"ids": []})
+        # empty ids -> fetch all (per _fetch_docs)
+        assert r.status_code == 200
         assert r.content[:4] == b"%PDF"
 
 

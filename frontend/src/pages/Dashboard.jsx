@@ -2,6 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
 import {
+  ScatterChart,
+  Scatter,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ZAxis,
+} from "recharts";
+import {
   Leaf,
   LogOut,
   Plus,
@@ -14,11 +24,23 @@ import {
   Download,
   MapPin,
   Layers,
-  Hash,
+  Map as MapIcon,
+  Printer,
+  X,
+  ChevronLeft,
+  ChevronRight,
   QrCode,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -71,6 +93,10 @@ export default function Dashboard() {
   const [editing, setEditing] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [exporting, setExporting] = useState("");
+  const [selected, setSelected] = useState(new Set());
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [mapOpen, setMapOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -105,6 +131,34 @@ export default function Dashboard() {
     });
   }, [records, search, kebunFilter]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [search, kebunFilter, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paged = useMemo(
+    () => filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [filtered, currentPage, pageSize]
+  );
+
+  const allSelected = filtered.length > 0 && filtered.every((r) => selected.has(r._id));
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map((r) => r._id)));
+    }
+  };
+  const toggleOne = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const openAdd = () => {
     setEditing(null);
     setRecordOpen(true);
@@ -118,6 +172,11 @@ export default function Dashboard() {
     try {
       await api.delete(`/records/${deleteTarget._id}`);
       toast.success("Data dihapus");
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(deleteTarget._id);
+        return next;
+      });
       setDeleteTarget(null);
       load();
     } catch (e) {
@@ -135,10 +194,13 @@ export default function Dashboard() {
     a.click();
   };
 
-  const exportPdf = async (mode) => {
-    setExporting(mode);
+  const exportPdf = async (mode, ids = null) => {
+    const key = ids ? `sel-${mode}` : mode;
+    setExporting(key);
     try {
-      const res = await api.get(`/records/export/${mode}`, { responseType: "blob" });
+      const res = ids
+        ? await api.post(`/records/export/${mode}`, { ids }, { responseType: "blob" })
+        : await api.get(`/records/export/${mode}`, { responseType: "blob" });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url;
@@ -253,9 +315,59 @@ export default function Dashboard() {
               >
                 <FileText className="w-4 h-4 mr-1.5" /> PDF Tabel
               </Button>
+              <Button
+                data-testid="map-button"
+                onClick={() => setMapOpen(true)}
+                variant="outline"
+                className="h-10 border-[#10B981]/50 text-[#0F291E] hover:bg-emerald-50"
+              >
+                <MapIcon className="w-4 h-4 mr-1.5" /> Peta Koordinat
+              </Button>
             </div>
           </div>
         </div>
+
+        {/* Selection action bar */}
+        {selected.size > 0 && (
+          <div
+            className="bg-[#0F291E] text-white rounded-2xl px-4 sm:px-5 py-3 mb-6 flex flex-col sm:flex-row sm:items-center gap-3 justify-between fade-in"
+            data-testid="selection-bar"
+          >
+            <span className="text-sm font-medium">
+              <span className="font-mono font-bold text-[#84CC16]">{selected.size}</span> lokasi dipilih
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                data-testid="print-selected-labels-button"
+                onClick={() => exportPdf("labels", [...selected])}
+                disabled={exporting === "sel-labels"}
+                size="sm"
+                className="bg-[#84CC16] hover:bg-[#65a30d] text-[#0F291E] font-semibold"
+              >
+                <Printer className="w-4 h-4 mr-1.5" /> Cetak Label Terpilih
+              </Button>
+              <Button
+                data-testid="print-selected-table-button"
+                onClick={() => exportPdf("table", [...selected])}
+                disabled={exporting === "sel-table"}
+                size="sm"
+                variant="outline"
+                className="border-white/30 text-white hover:bg-white/10 hover:text-white"
+              >
+                <FileText className="w-4 h-4 mr-1.5" /> Cetak Tabel Terpilih
+              </Button>
+              <Button
+                data-testid="clear-selection-button"
+                onClick={() => setSelected(new Set())}
+                size="sm"
+                variant="ghost"
+                className="text-white/70 hover:bg-white/10 hover:text-white"
+              >
+                <X className="w-4 h-4 mr-1.5" /> Batal Pilih
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Table */}
         <div className="bg-card rounded-2xl border overflow-hidden">
@@ -263,6 +375,14 @@ export default function Dashboard() {
             <table className="w-full text-sm" data-testid="records-table">
               <thead>
                 <tr className="bg-[#0F291E] text-white text-left">
+                  <th className="px-4 py-3 w-10">
+                    <Checkbox
+                      data-testid="select-all-checkbox"
+                      checked={allSelected}
+                      onCheckedChange={toggleAll}
+                      className="border-white/50 data-[state=checked]:bg-[#84CC16] data-[state=checked]:border-[#84CC16] data-[state=checked]:text-[#0F291E]"
+                    />
+                  </th>
                   {["QR", "Id Actual", "Kebun", "Afdeling", "Blok", "Code LSU", "Koord X", "Koord Y", "Aksi"].map(
                     (h) => (
                       <th key={h} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">
@@ -275,23 +395,33 @@ export default function Dashboard() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="text-center py-16 text-muted-foreground">
+                    <td colSpan={10} className="text-center py-16 text-muted-foreground">
                       Memuat data...
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="text-center py-16 text-muted-foreground" data-testid="empty-state">
+                    <td colSpan={10} className="text-center py-16 text-muted-foreground" data-testid="empty-state">
                       Belum ada data. Tambah manual atau impor dari Excel.
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((r) => (
+                  paged.map((r) => (
                     <tr
                       key={r._id}
                       data-testid={`table-row-${r._id}`}
-                      className="border-t hover:bg-muted/40 transition-colors row-in"
+                      className={`border-t transition-colors row-in ${
+                        selected.has(r._id) ? "bg-lime-50" : "hover:bg-muted/40"
+                      }`}
                     >
+                      <td className="px-4 py-2">
+                        <Checkbox
+                          data-testid={`select-row-${r._id}`}
+                          checked={selected.has(r._id)}
+                          onCheckedChange={() => toggleOne(r._id)}
+                          className="data-[state=checked]:bg-[#1B4D3E] data-[state=checked]:border-[#1B4D3E]"
+                        />
+                      </td>
                       <td className="px-4 py-2">
                         <div className="bg-white p-1 rounded border w-fit">
                           <QRCodeCanvas
@@ -351,8 +481,54 @@ export default function Dashboard() {
             </table>
           </div>
           {!loading && filtered.length > 0 && (
-            <div className="px-4 py-3 border-t text-xs text-muted-foreground" data-testid="records-count">
-              Menampilkan {filtered.length} dari {records.length} data
+            <div
+              className="px-4 py-3 border-t flex flex-col sm:flex-row items-center gap-3 justify-between"
+              data-testid="pagination-bar"
+            >
+              <div className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="records-count">
+                <span>Baris per halaman</span>
+                <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                  <SelectTrigger className="h-8 w-[72px]" data-testid="page-size-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[10, 25, 50, 100].map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {n}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="ml-2">
+                  {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filtered.length)} dari{" "}
+                  {filtered.length}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8"
+                  disabled={currentPage <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  data-testid="prev-page-button"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="text-xs font-medium" data-testid="page-indicator">
+                  Halaman {currentPage} / {totalPages}
+                </span>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  data-testid="next-page-button"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           )}
         </div>
@@ -360,6 +536,66 @@ export default function Dashboard() {
 
       <RecordDialog open={recordOpen} onOpenChange={setRecordOpen} record={editing} onSaved={load} />
       <ImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={load} />
+
+      <Dialog open={mapOpen} onOpenChange={setMapOpen}>
+        <DialogContent className="sm:max-w-3xl" data-testid="map-dialog">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-xl flex items-center gap-2">
+              <MapIcon className="w-5 h-5 text-[#10B981]" /> Peta Sebaran Koordinat
+            </DialogTitle>
+            <DialogDescription>
+              Visualisasi titik Koord X (horizontal) vs Koord Y (vertikal) untuk {filtered.length} lokasi
+              {kebunFilter !== "all" ? ` pada ${kebunFilter}` : ""}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="h-[420px] w-full" data-testid="coordinate-chart">
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                <XAxis
+                  type="number"
+                  dataKey="x"
+                  name="Koord X"
+                  domain={["auto", "auto"]}
+                  tick={{ fontSize: 11, fill: "#4B5563" }}
+                  label={{ value: "Koord X", position: "insideBottom", offset: -8, fontSize: 12, fill: "#0F291E" }}
+                />
+                <YAxis
+                  type="number"
+                  dataKey="y"
+                  name="Koord Y"
+                  domain={["auto", "auto"]}
+                  tick={{ fontSize: 11, fill: "#4B5563" }}
+                  label={{ value: "Koord Y", angle: -90, position: "insideLeft", fontSize: 12, fill: "#0F291E" }}
+                />
+                <ZAxis range={[80, 80]} />
+                <Tooltip
+                  cursor={{ strokeDasharray: "3 3" }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const d = payload[0].payload;
+                    return (
+                      <div className="bg-[#0F291E] text-white rounded-lg px-3 py-2 text-xs shadow-lg">
+                        <div className="font-semibold text-[#84CC16]">
+                          {d.kebun} / Blok {d.blok}
+                        </div>
+                        <div className="font-mono mt-0.5">{d.code_lsu}</div>
+                        <div className="font-mono text-white/70 mt-0.5">
+                          X: {d.x} · Y: {d.y}
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
+                <Scatter data={filtered.map((r) => ({ ...r, x: r.koord_x, y: r.koord_y }))} fill="#10B981" />
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
+          {filtered.length === 0 && (
+            <p className="text-center text-sm text-muted-foreground -mt-4">Tidak ada data untuk ditampilkan.</p>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent data-testid="delete-dialog">

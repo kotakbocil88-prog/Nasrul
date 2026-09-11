@@ -62,6 +62,23 @@ class RecordInput(BaseModel):
     koord_y: float
 
 
+class ImportRow(BaseModel):
+    kebun: str = ""
+    afdeling: str = ""
+    blok: str = ""
+    code_lsu: str = ""
+    koord_x: float = 0
+    koord_y: float = 0
+
+
+class ImportConfirm(BaseModel):
+    rows: List[ImportRow]
+
+
+class IdList(BaseModel):
+    ids: List[str] = []
+
+
 class UserRegister(BaseModel):
     email: str
     password: str
@@ -265,9 +282,7 @@ def _num(v):
         return 0.0
 
 
-@api_router.post("/records/import")
-async def import_excel(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    content = await file.read()
+def parse_excel(content: bytes) -> List[dict]:
     try:
         wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
     except Exception:
@@ -276,7 +291,6 @@ async def import_excel(file: UploadFile = File(...), user: dict = Depends(get_cu
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
         raise HTTPException(status_code=400, detail="File kosong")
-    # map header
     header = [(_cell(h)).lower().replace(" ", "").replace("_", "") for h in rows[0]]
 
     def idx(*names):
@@ -287,24 +301,40 @@ async def import_excel(file: UploadFile = File(...), user: dict = Depends(get_cu
 
     ik, ia, ib, il, ix, iy = (idx("kebun"), idx("afdeling"), idx("blok"),
                               idx("codelsu", "lsu"), idx("koordx", "x"), idx("koordy", "y"))
-    inserted = 0
-    new_docs = []
+    parsed = []
     for row in rows[1:]:
         if row is None or all(c is None or _cell(c) == "" for c in row):
             continue
+
         def g(i):
             return _cell(row[i]) if i is not None and i < len(row) else ""
+
         def gn(i):
             return _num(row[i]) if i is not None and i < len(row) else 0.0
+
         if not (g(ik) or g(ib) or g(il)):
             continue
-        new_docs.append({
+        parsed.append({
             "kebun": g(ik), "afdeling": g(ia), "blok": g(ib), "code_lsu": g(il),
             "koord_x": gn(ix), "koord_y": gn(iy),
-            "created_at": datetime.now(timezone.utc).isoformat(),
         })
-    for doc in new_docs:
+    return parsed
+
+
+@api_router.post("/records/import/preview")
+async def import_preview(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    content = await file.read()
+    rows = parse_excel(content)
+    return {"rows": rows, "count": len(rows)}
+
+
+@api_router.post("/records/import/confirm")
+async def import_confirm(body: ImportConfirm, user: dict = Depends(get_current_user)):
+    inserted = 0
+    for r in body.rows:
+        doc = r.model_dump()
         doc["id_actual"] = await next_id_actual()
+        doc["created_at"] = datetime.now(timezone.utc).isoformat()
         await db.records.insert_one(doc)
         inserted += 1
     return {"inserted": inserted}
@@ -317,9 +347,16 @@ def _draw_qr(c, payload, x, y, size):
     c.drawImage(ImageReader(bio), x, y, size, size)
 
 
-@api_router.get("/records/export/labels")
-async def export_labels(user: dict = Depends(get_current_user)):
-    docs = await db.records.find().sort("id_actual", 1).to_list(5000)
+async def _fetch_docs(ids: Optional[List[str]]):
+    if ids:
+        oids = [ObjectId(i) for i in ids]
+        docs = await db.records.find({"_id": {"$in": oids}}).sort("id_actual", 1).to_list(5000)
+    else:
+        docs = await db.records.find().sort("id_actual", 1).to_list(5000)
+    return docs
+
+
+def build_labels_pdf(docs) -> io.BytesIO:
     buf = io.BytesIO()
     c = pdf_canvas.Canvas(buf, pagesize=A4)
     pw, ph = A4
@@ -355,13 +392,10 @@ async def export_labels(user: dict = Depends(get_current_user)):
         c.setFont("Helvetica", 12)
         c.drawCentredString(pw / 2, ph / 2, "Tidak ada data")
     c.showPage(); c.save(); buf.seek(0)
-    return StreamingResponse(buf, media_type="application/pdf",
-                             headers={"Content-Disposition": "attachment; filename=label_qr_kebun.pdf"})
+    return buf
 
 
-@api_router.get("/records/export/table")
-async def export_table(user: dict = Depends(get_current_user)):
-    docs = await db.records.find().sort("id_actual", 1).to_list(5000)
+def build_table_pdf(docs) -> io.BytesIO:
     buf = io.BytesIO()
     c = pdf_canvas.Canvas(buf, pagesize=A4)
     pw, ph = A4
@@ -400,8 +434,36 @@ async def export_table(user: dict = Depends(get_current_user)):
         c.setFont("Helvetica", 12)
         c.drawCentredString(pw / 2, ph / 2, "Tidak ada data")
     c.showPage(); c.save(); buf.seek(0)
+    return buf
+
+
+def _pdf_response(buf, filename):
     return StreamingResponse(buf, media_type="application/pdf",
-                             headers={"Content-Disposition": "attachment; filename=laporan_tabel_kebun.pdf"})
+                             headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+
+@api_router.get("/records/export/labels")
+async def export_labels(user: dict = Depends(get_current_user)):
+    docs = await _fetch_docs(None)
+    return _pdf_response(build_labels_pdf(docs), "label_qr_kebun.pdf")
+
+
+@api_router.post("/records/export/labels")
+async def export_labels_selected(body: IdList, user: dict = Depends(get_current_user)):
+    docs = await _fetch_docs(body.ids)
+    return _pdf_response(build_labels_pdf(docs), "label_qr_kebun.pdf")
+
+
+@api_router.get("/records/export/table")
+async def export_table(user: dict = Depends(get_current_user)):
+    docs = await _fetch_docs(None)
+    return _pdf_response(build_table_pdf(docs), "laporan_tabel_kebun.pdf")
+
+
+@api_router.post("/records/export/table")
+async def export_table_selected(body: IdList, user: dict = Depends(get_current_user)):
+    docs = await _fetch_docs(body.ids)
+    return _pdf_response(build_table_pdf(docs), "laporan_tabel_kebun.pdf")
 
 
 app.include_router(api_router)

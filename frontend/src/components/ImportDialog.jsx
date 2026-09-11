@@ -16,7 +16,13 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
   const [file, setFile] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [rows, setRows] = useState(null);
   const inputRef = useRef();
+
+  const reset = () => {
+    setFile(null);
+    setRows(null);
+  };
 
   const pick = (f) => {
     if (!f) return;
@@ -25,19 +31,36 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
       return;
     }
     setFile(f);
+    setRows(null);
   };
 
-  const upload = async () => {
+  const doPreview = async () => {
     if (!file) return;
     setUploading(true);
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const { data } = await api.post("/records/import", fd, {
+      const { data } = await api.post("/records/import/preview", fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
+      if (!data.count) {
+        toast.error("Tidak ada baris data yang terbaca dari file");
+      }
+      setRows(data.rows);
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const doConfirm = async () => {
+    if (!rows?.length) return;
+    setUploading(true);
+    try {
+      const { data } = await api.post("/records/import/confirm", { rows });
       toast.success(`${data.inserted} data berhasil diimpor`);
-      setFile(null);
+      reset();
       onImported();
       onOpenChange(false);
     } catch (err) {
@@ -61,9 +84,14 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
     }
   };
 
+  const handleOpenChange = (o) => {
+    if (!o) reset();
+    onOpenChange(o);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg" data-testid="import-dialog">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-2xl" data-testid="import-dialog">
         <DialogHeader>
           <DialogTitle className="font-heading text-xl">Impor Data dari Excel</DialogTitle>
           <DialogDescription>
@@ -80,6 +108,7 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
           <Download className="w-4 h-4" /> Unduh template Excel (Kebun, Afdeling, Blok, Code_LSU, Koord_X, Koord_Y)
         </button>
 
+        {rows === null ? (
         <div
           data-testid="import-dropzone"
           onClick={() => inputRef.current?.click()}
@@ -119,19 +148,70 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
             </div>
           )}
         </div>
+        ) : (
+          <div data-testid="import-preview" className="rounded-xl border overflow-hidden">
+            <div className="px-4 py-2 bg-muted flex items-center justify-between">
+              <span className="text-sm font-semibold text-[#0F291E]">
+                Pratinjau {rows.length} baris
+              </span>
+              <button
+                type="button"
+                data-testid="import-back-button"
+                onClick={reset}
+                className="text-xs text-muted-foreground hover:text-[#1B4D3E] transition-colors"
+              >
+                Ganti file
+              </button>
+            </div>
+            <div className="max-h-72 overflow-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-[#0F291E] text-white">
+                  <tr className="text-left">
+                    {["Kebun", "Afdeling", "Blok", "Code LSU", "Koord X", "Koord Y"].map((h) => (
+                      <th key={h} className="px-3 py-2 font-semibold whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={i} className="border-t hover:bg-muted/40">
+                      <td className="px-3 py-1.5 font-medium">{r.kebun}</td>
+                      <td className="px-3 py-1.5">{r.afdeling}</td>
+                      <td className="px-3 py-1.5">{r.blok}</td>
+                      <td className="px-3 py-1.5 font-mono">{r.code_lsu}</td>
+                      <td className="px-3 py-1.5 font-mono text-muted-foreground">{r.koord_x}</td>
+                      <td className="px-3 py-1.5 font-mono text-muted-foreground">{r.koord_y}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="import-cancel-button">
+          <Button variant="outline" onClick={() => handleOpenChange(false)} data-testid="import-cancel-button">
             Batal
           </Button>
-          <Button
-            onClick={upload}
-            disabled={!file || uploading}
-            data-testid="import-upload-button"
-            className="bg-[#1B4D3E] hover:bg-[#0F291E] text-white"
-          >
-            {uploading ? "Mengimpor..." : "Impor Data"}
-          </Button>
+          {rows === null ? (
+            <Button
+              onClick={doPreview}
+              disabled={!file || uploading}
+              data-testid="import-preview-button"
+              className="bg-[#1B4D3E] hover:bg-[#0F291E] text-white"
+            >
+              {uploading ? "Membaca..." : "Pratinjau"}
+            </Button>
+          ) : (
+            <Button
+              onClick={doConfirm}
+              disabled={!rows.length || uploading}
+              data-testid="import-upload-button"
+              className="bg-[#1B4D3E] hover:bg-[#0F291E] text-white"
+            >
+              {uploading ? "Mengimpor..." : `Impor ${rows.length} Data`}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
