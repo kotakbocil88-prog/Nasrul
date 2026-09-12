@@ -24,6 +24,7 @@ import {
   AlertCircle,
   TrendingUp,
   SlidersHorizontal,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -286,6 +287,15 @@ function hasCoord(v) {
 }
 function isTagged(r) {
   return hasCoord(r.koord_x) && hasCoord(r.koord_y);
+}
+
+// Tanda "Baru": data yang ditambahkan/di-upload dalam 24 jam terakhir (berdasarkan created_at)
+const NEW_WINDOW_MS = 24 * 60 * 60 * 1000;
+function isNew(r) {
+  if (!r || !r.created_at) return false;
+  const t = new Date(r.created_at).getTime();
+  if (Number.isNaN(t)) return false;
+  return Date.now() - t <= NEW_WINDOW_MS;
 }
 
 
@@ -1427,7 +1437,11 @@ export default function Dashboard() {
                       key={r._id}
                       data-testid={`table-row-${r._id}`}
                       className={`border-t transition-colors row-in ${
-                        selected.has(r._id) ? "bg-lime-50" : "hover:bg-muted/40"
+                        selected.has(r._id)
+                          ? "bg-lime-50"
+                          : isNew(r)
+                          ? "bg-sky-50/60 hover:bg-sky-50"
+                          : "hover:bg-muted/40"
                       }`}
                     >
                       <td className="px-4 py-2">
@@ -1449,7 +1463,20 @@ export default function Dashboard() {
                           />
                         </div>
                       </td>
-                      <td className="px-4 py-2 font-mono font-semibold text-[#1B4D3E] whitespace-nowrap">{r.id_actual}</td>
+                      <td className="px-4 py-2 font-mono font-semibold text-[#1B4D3E] whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span>{r.id_actual}</span>
+                          {isNew(r) && (
+                            <span
+                              data-testid={`badge-new-${r._id}`}
+                              title="Baru ditambahkan / di-upload (24 jam terakhir)"
+                              className="inline-flex items-center gap-1 rounded-full bg-sky-100 text-sky-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                            >
+                              <Sparkles className="w-3 h-3" /> Baru
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       {visibleColumns.map(([key, , kind]) => (
                         <td
                           key={key}
