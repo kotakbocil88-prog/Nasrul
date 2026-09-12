@@ -1171,7 +1171,7 @@ export default function Dashboard() {
                 variant="outline"
                 className="h-10 border-[#84CC16]/50 text-[#4d7c0f] hover:bg-lime-50"
               >
-                <Tags className="w-4 h-4 mr-1.5" /> Cetak Label ({filtered.length})
+                <Tags className="w-4 h-4 mr-1.5" /> Pratinjau & Cetak Label ({filtered.length})
               </Button>
               <Button
                 data-testid="export-table-button"
