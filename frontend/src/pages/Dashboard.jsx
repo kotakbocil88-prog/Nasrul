@@ -314,6 +314,7 @@ function LabelPreview({ r, size }) {
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [records, setRecords] = useState([]);
   const [stats, setStats] = useState({});
   const [progress, setProgress] = useState(null);
@@ -1123,21 +1124,25 @@ export default function Dashboard() {
               </button>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button
-                data-testid="add-record-button"
-                onClick={openAdd}
-                className="bg-[#1B4D3E] hover:bg-[#0F291E] text-white h-10"
-              >
-                <Plus className="w-4 h-4 mr-1.5" /> Tambah
-              </Button>
-              <Button
-                data-testid="import-button"
-                onClick={() => setImportOpen(true)}
-                variant="outline"
-                className="h-10 border-[#1B4D3E]/30 text-[#1B4D3E] hover:bg-[#1B4D3E]/5"
-              >
-                <Upload className="w-4 h-4 mr-1.5" /> Impor Excel
-              </Button>
+              {isAdmin && (
+                <Button
+                  data-testid="add-record-button"
+                  onClick={openAdd}
+                  className="bg-[#1B4D3E] hover:bg-[#0F291E] text-white h-10"
+                >
+                  <Plus className="w-4 h-4 mr-1.5" /> Tambah
+                </Button>
+              )}
+              {isAdmin && (
+                <Button
+                  data-testid="import-button"
+                  onClick={() => setImportOpen(true)}
+                  variant="outline"
+                  className="h-10 border-[#1B4D3E]/30 text-[#1B4D3E] hover:bg-[#1B4D3E]/5"
+                >
+                  <Upload className="w-4 h-4 mr-1.5" /> Impor Excel
+                </Button>
+              )}
               <Button
                 data-testid="export-labels-button"
                 onClick={() => openPreview(null)}
@@ -1333,16 +1338,18 @@ export default function Dashboard() {
               >
                 <Download className="w-4 h-4 mr-1.5" /> Ekspor Excel Terpilih
               </Button>
-              <Button
-                data-testid="delete-selected-button"
-                onClick={() => setBulkDeleteOpen(true)}
-                disabled={bulkDeleting}
-                size="sm"
-                variant="outline"
-                className="border-red-300/60 text-red-100 bg-red-500/20 hover:bg-red-500/30 hover:text-white"
-              >
-                <Trash2 className="w-4 h-4 mr-1.5" /> Hapus Terpilih
-              </Button>
+              {isAdmin && (
+                <Button
+                  data-testid="delete-selected-button"
+                  onClick={() => setBulkDeleteOpen(true)}
+                  disabled={bulkDeleting}
+                  size="sm"
+                  variant="outline"
+                  className="border-red-300/60 text-red-100 bg-red-500/20 hover:bg-red-500/30 hover:text-white"
+                >
+                  <Trash2 className="w-4 h-4 mr-1.5" /> Hapus Terpilih
+                </Button>
+              )}
               <Button
                 data-testid="clear-selection-button"
                 onClick={() => setSelected(new Set())}
@@ -1462,26 +1469,30 @@ export default function Dashboard() {
                           >
                             <Download className="w-4 h-4" />
                           </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-[#b45309] hover:bg-amber-50"
-                            data-testid={`edit-record-${r._id}`}
-                            onClick={() => openEdit(r)}
-                            title="Edit"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                            data-testid={`delete-record-${r._id}`}
-                            onClick={() => setDeleteTarget(r)}
-                            title="Hapus"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {isAdmin && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-[#b45309] hover:bg-amber-50"
+                              data-testid={`edit-record-${r._id}`}
+                              onClick={() => openEdit(r)}
+                              title="Edit"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {isAdmin && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                              data-testid={`delete-record-${r._id}`}
+                              onClick={() => setDeleteTarget(r)}
+                              title="Hapus"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>

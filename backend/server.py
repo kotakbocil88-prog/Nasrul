@@ -195,6 +195,14 @@ async def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Token tidak valid")
 
 
+async def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    """Hanya admin yang boleh menulis (tambah/edit/hapus/import).
+    Viewer hanya bisa melihat & mencetak."""
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Akses ditolak: hanya admin yang dapat mengubah data")
+    return user
+
+
 # ---------------------------------------------------------------- QR helpers
 def fmt_num(v) -> str:
     """Format koordinat memakai koma sebagai pemisah desimal (format Indonesia)."""
@@ -403,7 +411,7 @@ async def stats(user: dict = Depends(get_current_user)):
 
 
 @api_router.post("/records")
-async def create_record(body: RecordInput, user: dict = Depends(get_current_user)):
+async def create_record(body: RecordInput, user: dict = Depends(require_admin)):
     doc = body.model_dump()
     apply_derived(doc)
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
@@ -415,7 +423,7 @@ async def create_record(body: RecordInput, user: dict = Depends(get_current_user
 
 
 @api_router.put("/records/{rid}")
-async def update_record(rid: str, body: RecordInput, user: dict = Depends(get_current_user)):
+async def update_record(rid: str, body: RecordInput, user: dict = Depends(require_admin)):
     existing = await db.records.find_one({"_id": ObjectId(rid)})
     if not existing:
         raise HTTPException(status_code=404, detail="Data tidak ditemukan")
@@ -433,19 +441,19 @@ async def update_record(rid: str, body: RecordInput, user: dict = Depends(get_cu
 
 
 @api_router.delete("/records/{rid}")
-async def delete_record(rid: str, user: dict = Depends(get_current_user)):
+async def delete_record(rid: str, user: dict = Depends(require_admin)):
     await db.records.delete_one({"_id": ObjectId(rid)})
     return {"ok": True}
 
 
 @api_router.delete("/records")
-async def delete_all(user: dict = Depends(get_current_user)):
+async def delete_all(user: dict = Depends(require_admin)):
     await db.records.delete_many({})
     return {"ok": True}
 
 
 @api_router.post("/records/delete-bulk")
-async def delete_bulk(body: IdList, user: dict = Depends(get_current_user)):
+async def delete_bulk(body: IdList, user: dict = Depends(require_admin)):
     if not body.ids:
         return {"ok": True, "deleted": 0}
     oids = [ObjectId(i) for i in body.ids]
@@ -563,14 +571,14 @@ def parse_excel(content: bytes) -> List[dict]:
 
 
 @api_router.post("/records/import/preview")
-async def import_preview(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+async def import_preview(file: UploadFile = File(...), user: dict = Depends(require_admin)):
     content = await file.read()
     rows = parse_excel(content)
     return {"rows": rows, "count": len(rows)}
 
 
 @api_router.post("/records/import/confirm")
-async def import_confirm(body: ImportConfirm, user: dict = Depends(get_current_user)):
+async def import_confirm(body: ImportConfirm, user: dict = Depends(require_admin)):
     inserted = 0
     for r in body.rows:
         doc = r.model_dump()
@@ -965,6 +973,25 @@ async def startup():
     elif not verify_password(admin_pw, existing["password_hash"]):
         await db.users.update_one({"email": admin_email},
                                   {"$set": {"password_hash": hash_password(admin_pw)}})
+
+    # Seed viewer (read-only: bisa melihat & mencetak, tidak bisa tambah/edit/hapus/import)
+    viewer_email = os.environ.get("VIEWER_EMAIL", "viewer@eqms.id").lower()
+    viewer_pw = os.environ.get("VIEWER_PASSWORD", "viewer123")
+    viewer_existing = await db.users.find_one({"email": viewer_email})
+    if viewer_existing is None:
+        await db.users.insert_one({
+            "email": viewer_email, "password_hash": hash_password(viewer_pw),
+            "name": "Viewer", "role": "viewer",
+            "created_at": datetime.now(timezone.utc).isoformat()})
+        logger.info("Viewer seeded")
+    else:
+        updates = {}
+        if not verify_password(viewer_pw, viewer_existing["password_hash"]):
+            updates["password_hash"] = hash_password(viewer_pw)
+        if viewer_existing.get("role") != "viewer":
+            updates["role"] = "viewer"
+        if updates:
+            await db.users.update_one({"email": viewer_email}, {"$set": updates})
 
 
 @app.on_event("shutdown")

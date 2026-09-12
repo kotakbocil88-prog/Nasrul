@@ -44,11 +44,6 @@ export default function Login() {
     }
   };
 
-  const fillDemo = () => {
-    setEmail("admin@eqms.id");
-    setPassword("EQMS1234");
-  };
-
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
       {/* Hero */}
@@ -160,15 +155,6 @@ export default function Login() {
           >
             {loading ? "Memproses..." : "Masuk"}
           </Button>
-
-          <button
-            type="button"
-            data-testid="login-demo-button"
-            onClick={fillDemo}
-            className="w-full mt-3 text-xs text-muted-foreground hover:text-[#1B4D3E] transition-colors"
-          >
-            Gunakan akun demo (admin@eqms.id / EQMS1234)
-          </button>
         </form>
       </div>
     </div>
