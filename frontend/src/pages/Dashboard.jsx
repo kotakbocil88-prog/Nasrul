@@ -70,12 +70,31 @@ import api, { API } from "@/lib/api";
 const HERO_IMG =
   "https://images.unsplash.com/photo-1540843650088-e05e97f1855b?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600";
 
-function StatCard({ icon: Icon, label, value, accent }) {
+function StatCard({ icon: Icon, label, value, accent, onClick }) {
+  const clickable = typeof onClick === "function";
   return (
     <div
-      className="stat-elegant rounded-2xl border p-5 fade-in"
+      className={`stat-elegant rounded-2xl border p-5 fade-in ${
+        clickable
+          ? "cursor-pointer transition-transform hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[#84CC16]"
+          : ""
+      }`}
       style={{ "--stat-accent": accent }}
       data-testid={`stat-${label}`}
+      onClick={onClick}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      title={clickable ? "Klik untuk lihat data di tabel" : undefined}
     >
       <div className="stat-glow" />
       <div className="relative flex items-center justify-between">
@@ -95,6 +114,11 @@ function StatCard({ icon: Icon, label, value, accent }) {
       <div className="relative mt-3 h-1 w-full rounded-full bg-muted overflow-hidden">
         <div className="h-full rounded-full" style={{ width: "100%", background: accent, opacity: 0.35 }} />
       </div>
+      {clickable && (
+        <span className="relative mt-2 inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
+          Lihat di tabel <ChevronRight className="w-3 h-3" />
+        </span>
+      )}
     </div>
   );
 }
