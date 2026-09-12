@@ -84,8 +84,6 @@ const GROUPS = [
     cols: 2,
     fields: [
       ["tanggal_lsu", "Tanggal LSU", "date"],
-      ["la", "LA", "number"],
-      ["lai", "LAI", "number"],
     ],
   },
 ];
@@ -124,6 +122,28 @@ export function RecordDialog({ open, onOpenChange, record, onSaved }) {
     return Math.round((pokok / luas) * 100) / 100;
   })();
 
+  // LA (Luas Daun per pokok, m2) & LAI dihitung otomatis (metode Hardon 1969)
+  const numOf = (v) => {
+    const n = parseFloat(String(v).replace(",", "."));
+    return Number.isNaN(n) ? 0 : n;
+  };
+  const la = (() => {
+    const lens = [numOf(form.panjang_helai_1), numOf(form.panjang_helai_2)].filter((x) => x > 0);
+    const wids = [numOf(form.lebar_helai_1), numOf(form.lebar_helai_2)].filter((x) => x > 0);
+    const n = numOf(form.jumlah_anak_daun);
+    const fronds = numOf(form.jumlah_pelepah);
+    if (!lens.length || !wids.length || n <= 0) return "";
+    const ml = lens.reduce((a, b) => a + b, 0) / lens.length;
+    const mw = wids.reduce((a, b) => a + b, 0) / wids.length;
+    const laFrond = (0.55 * n * ml * mw) / 10000;
+    const val = fronds > 0 ? laFrond * fronds : laFrond;
+    return Math.round(val * 10000) / 10000;
+  })();
+  const lai = (() => {
+    if (la === "" || sph === "" || !sph) return "";
+    return Math.round(((la * sph) / 10000) * 10000) / 10000;
+  })();
+
   const save = async () => {
     const missing = REQUIRED_KEYS.filter((k) => String(form[k] ?? "").trim() === "");
     if (missing.length) {
@@ -140,6 +160,9 @@ export function RecordDialog({ open, onOpenChange, record, onSaved }) {
           body[k] = form[k] ?? "";
         }
       });
+      // LA & LAI otomatis (server akan menghitung ulang juga)
+      body.la = la === "" ? 0 : la;
+      body.lai = lai === "" ? 0 : lai;
       if (record) await api.put(`/records/${record._id}`, body);
       else await api.post("/records", body);
       toast.success(record ? "Data diperbarui" : "Data ditambahkan");
@@ -223,6 +246,39 @@ export function RecordDialog({ open, onOpenChange, record, onSaved }) {
                       className="mt-1.5 bg-muted/60"
                     />
                   </div>
+                )}
+                {group.title === "LSU" && (
+                  <>
+                    <div>
+                      <Label className="text-xs font-semibold text-muted-foreground">
+                        LA — Luas Daun (m², otomatis)
+                      </Label>
+                      <Input
+                        data-testid="record-input-la"
+                        value={la === "" ? "" : la}
+                        readOnly
+                        disabled
+                        className="mt-1.5 bg-muted/60"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-semibold text-muted-foreground">
+                        LAI (otomatis)
+                      </Label>
+                      <Input
+                        data-testid="record-input-lai"
+                        value={lai === "" ? "" : lai}
+                        readOnly
+                        disabled
+                        className="mt-1.5 bg-muted/60"
+                      />
+                    </div>
+                    <p className="col-span-2 sm:col-span-3 text-[11px] text-muted-foreground leading-relaxed">
+                      LA & LAI dihitung otomatis dari pengukuran daun (metode Hardon 1969):
+                      LA = 0,55 × jumlah anak daun × rata-rata panjang helai × rata-rata lebar helai × jumlah pelepah ÷ 10.000 (m²/pokok);
+                      LAI = LA × SPH ÷ 10.000.
+                    </p>
+                  </>
                 )}
               </div>
             </div>

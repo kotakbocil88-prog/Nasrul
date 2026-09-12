@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Fragment } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
 import {
@@ -23,6 +23,7 @@ import {
   CheckCircle2,
   AlertCircle,
   TrendingUp,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -213,6 +214,35 @@ function cellValue(r, key, kind) {
   return v === null || v === undefined ? "" : String(v);
 }
 
+// Metrik agronomi untuk panel ringkasan
+const AGRO_METRICS = [
+  { key: "lai", label: "LAI", unit: "", digits: 4, showTotal: false },
+  { key: "panjang_pelepah", label: "Panjang Pelepah", unit: "cm", digits: 1, showTotal: false },
+  { key: "sph", label: "SPH", unit: "pkk/ha", digits: 2, showTotal: false },
+  { key: "jumlah_pelepah", label: "Jumlah Pelepah", unit: "", digits: 1, showTotal: true },
+];
+
+function metricStats(list, key) {
+  const vals = list
+    .map((r) => parseFloat(String(r[key]).replace(",", ".")))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (!vals.length) return { avg: null, min: null, max: null, sum: 0, count: 0 };
+  const sum = vals.reduce((a, b) => a + b, 0);
+  return {
+    avg: sum / vals.length,
+    min: Math.min(...vals),
+    max: Math.max(...vals),
+    sum,
+    count: vals.length,
+  };
+}
+
+function fmtStat(v, digits) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return "-";
+  const r = Math.round(v * 10 ** digits) / 10 ** digits;
+  return String(r).replace(".", ",");
+}
+
 function payloadOf(r) {
   // Isi QR = Id Actual (gabungan Kebun+Afdeling+Blok+CodeLSU+Koord_X+Koord_Y, tanpa pemisah)
   return (
@@ -243,7 +273,7 @@ const LABEL_SIZES = {
 
 function LabelPreview({ r, size }) {
   const cfg = LABEL_SIZES[size] || LABEL_SIZES.medium;
-  const line1 = [r.kebun, r.afdeling, r.blok, r.code_lsu].filter(Boolean).join(" ");
+  const line1 = [r.kebun, r.afdeling, r.titik_sample, r.blok].filter(Boolean).join(" ");
   const line2 = `${fmtNum(r.koord_x)} ${fmtNum(r.koord_y)}`.trim();
   return (
     <div className="border-2 border-gray-900 rounded-sm bg-white flex flex-col items-center p-2">
@@ -268,6 +298,11 @@ export default function Dashboard() {
   const [kebunFilter, setKebunFilter] = useState("all");
   const [afdelingFilter, setAfdelingFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all"); // all | tagged | untagged
+  const [kategoriFilter, setKategoriFilter] = useState("all");
+  const [tanggalFrom, setTanggalFrom] = useState("");
+  const [tanggalTo, setTanggalTo] = useState("");
+  const [visibleCols, setVisibleCols] = useState(() => new Set(DATA_COLUMNS.map((c) => c[0])));
+  const [colMenuOpen, setColMenuOpen] = useState(false);
   const [recordOpen, setRecordOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -317,17 +352,30 @@ export default function Dashboard() {
     );
   }, [records, kebunFilter]);
 
+  const kategoriOptions = useMemo(
+    () => [...new Set(records.map((r) => r.kategori).filter(Boolean))].sort((a, b) =>
+      String(a).localeCompare(String(b), "id", { numeric: true })
+    ),
+    [records]
+  );
+
   const baseFiltered = useMemo(() => {
     const q = search.toLowerCase().trim();
     return records.filter((r) => {
       const matchQ =
         !q ||
-        [r.kebun, r.afdeling, r.blok, r.code_lsu].some((v) => (v || "").toLowerCase().includes(q));
+        [r.kebun, r.afdeling, r.blok, r.code_lsu, r.titik_sample, r.kategori].some((v) =>
+          String(v || "").toLowerCase().includes(q)
+        );
       const matchK = kebunFilter === "all" || r.kebun === kebunFilter;
       const matchA = afdelingFilter === "all" || String(r.afdeling) === String(afdelingFilter);
-      return matchQ && matchK && matchA;
+      const matchKat = kategoriFilter === "all" || String(r.kategori) === String(kategoriFilter);
+      const tgl = String(r.tanggal_lsu || "").slice(0, 10);
+      const matchFrom = !tanggalFrom || (tgl && tgl >= tanggalFrom);
+      const matchTo = !tanggalTo || (tgl && tgl <= tanggalTo);
+      return matchQ && matchK && matchA && matchKat && matchFrom && matchTo;
     });
-  }, [records, search, kebunFilter, afdelingFilter]);
+  }, [records, search, kebunFilter, afdelingFilter, kategoriFilter, tanggalFrom, tanggalTo]);
 
   const taggingStats = useMemo(() => {
     let tagged = 0;
@@ -394,9 +442,42 @@ export default function Dashboard() {
       .sort((p, q) => q.total - p.total);
   }, [baseFiltered]);
 
+  // Ringkasan agronomi (LAI, Panjang Pelepah, SPH, Jumlah Pelepah) — ikut filter aktif
+  const agroSummary = useMemo(
+    () => Object.fromEntries(AGRO_METRICS.map((m) => [m.key, metricStats(filtered, m.key)])),
+    [filtered]
+  );
+
+  const agroByKebun = useMemo(() => {
+    const map = {};
+    for (const r of filtered) {
+      const k = r.kebun || "(Tanpa Kebun)";
+      const a = r.afdeling || "-";
+      if (!map[k]) map[k] = { kebun: k, rows: [], afd: {} };
+      map[k].rows.push(r);
+      if (!map[k].afd[a]) map[k].afd[a] = [];
+      map[k].afd[a].push(r);
+    }
+    return Object.values(map)
+      .map((x) => ({
+        kebun: x.kebun,
+        count: x.rows.length,
+        stats: Object.fromEntries(AGRO_METRICS.map((m) => [m.key, metricStats(x.rows, m.key)])),
+        afdelings: Object.entries(x.afd)
+          .map(([afdeling, list]) => ({
+            afdeling,
+            count: list.length,
+            stats: Object.fromEntries(AGRO_METRICS.map((m) => [m.key, metricStats(list, m.key)])),
+          }))
+          .sort((p, q) => String(p.afdeling).localeCompare(String(q.afdeling), "id", { numeric: true })),
+      }))
+      .sort((p, q) => q.count - p.count);
+  }, [filtered]);
+
+
   useEffect(() => {
     setPage(1);
-  }, [search, kebunFilter, afdelingFilter, statusFilter, pageSize]);
+  }, [search, kebunFilter, afdelingFilter, statusFilter, kategoriFilter, tanggalFrom, tanggalTo, pageSize]);
 
   // Reset filter afdeling bila kebun berubah dan afdeling tak lagi tersedia
   useEffect(() => {
@@ -413,6 +494,13 @@ export default function Dashboard() {
   );
 
   const allSelected = filtered.length > 0 && filtered.every((r) => selected.has(r._id));
+
+  const visibleColumns = useMemo(
+    () => DATA_COLUMNS.filter(([k]) => visibleCols.has(k)),
+    [visibleCols]
+  );
+  const tableColSpan = visibleColumns.length + 5; // checkbox + QR + ID Actual + status + aksi
+
   const toggleAll = () => {
     if (allSelected) {
       setSelected(new Set());
@@ -618,8 +706,66 @@ export default function Dashboard() {
       </section>
 
       <main className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 pb-8 sm:pb-10">
-        {/* Stats (overlapping the hero banner) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 -mt-16 sm:-mt-20 mb-8 relative z-10">
+        {/* Filter utama — kartu elegan mengambang di bawah hero */}
+        <div
+          className="bg-card/95 backdrop-blur rounded-2xl border shadow-xl p-3 sm:p-4 -mt-16 sm:-mt-20 mb-6 relative z-10 transition-shadow hover:shadow-2xl"
+          data-testid="top-filter-bar"
+        >
+          <div className="flex flex-col lg:flex-row lg:items-center gap-2.5">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                data-testid="top-search-input"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Cari Kebun, Afdeling, Blok, Code LSU, Titik Sample..."
+                className="pl-9 h-10"
+              />
+            </div>
+            <Select value={kebunFilter} onValueChange={setKebunFilter}>
+              <SelectTrigger className="w-full lg:w-48 h-10" data-testid="top-kebun-filter">
+                <SelectValue placeholder="Semua Kebun" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Kebun</SelectItem>
+                {kebunOptions.map((k) => (
+                  <SelectItem key={k} value={k}>
+                    {k}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={afdelingFilter} onValueChange={setAfdelingFilter}>
+              <SelectTrigger className="w-full lg:w-44 h-10" data-testid="top-afdeling-filter">
+                <SelectValue placeholder="Semua Afdeling" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Afdeling</SelectItem>
+                {afdelingOptions.map((a) => (
+                  <SelectItem key={a} value={String(a)}>
+                    Afdeling {a}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={kategoriFilter} onValueChange={setKategoriFilter}>
+              <SelectTrigger className="w-full lg:w-44 h-10" data-testid="top-kategori-filter">
+                <SelectValue placeholder="Semua Kategori" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Kategori</SelectItem>
+                {kategoriOptions.map((k) => (
+                  <SelectItem key={k} value={String(k)}>
+                    {k}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8 relative z-10">
           <StatCard icon={MapPin} label="Total Data" value={stats.total_records ?? 0} accent="#1B4D3E" />
           <StatCard icon={Leaf} label="Kebun" value={stats.total_kebun ?? 0} accent="#10B981" />
           <StatCard icon={Layers} label="Blok" value={stats.total_blok ?? 0} accent="#84CC16" />
@@ -784,6 +930,112 @@ export default function Dashboard() {
           )}
         </div>
 
+        {/* Ringkasan Agronomi: LAI, Panjang Pelepah, SPH, Jumlah Pelepah */}
+        <div className="mb-8" data-testid="agro-summary-section">
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingUp className="w-5 h-5 text-[#10B981]" />
+            <div>
+              <h3 className="font-heading font-bold text-base text-[#0B1D15] leading-none">
+                Ringkasan Agronomi
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                LAI, Panjang Pelepah, SPH & Jumlah Pelepah — dari {filtered.length} data terfilter
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            {AGRO_METRICS.map((m, i) => {
+              const s = agroSummary[m.key] || {};
+              const accents = ["#10B981", "#84CC16", "#0EA5E9", "#F59E0B"];
+              const accent = accents[i % accents.length];
+              return (
+                <div
+                  key={m.key}
+                  data-testid={`agro-card-${m.key}`}
+                  className="bg-card rounded-2xl border p-4 flex flex-col"
+                  style={{ borderTopColor: accent, borderTopWidth: 3 }}
+                >
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {m.label}
+                  </span>
+                  <div className="mt-1.5 flex items-baseline gap-1">
+                    <span
+                      className="font-heading font-extrabold text-2xl leading-none"
+                      data-testid={`agro-avg-${m.key}`}
+                    >
+                      {fmtStat(s.avg, m.digits)}
+                    </span>
+                    {m.unit && <span className="text-xs text-muted-foreground">{m.unit}</span>}
+                  </div>
+                  <span className="text-[10px] text-muted-foreground mt-0.5">Rata-rata</span>
+                  <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="block text-[10px] text-muted-foreground uppercase">Min</span>
+                      <span className="font-semibold text-[#0B1D15]">{fmtStat(s.min, m.digits)}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-muted-foreground uppercase">Maks</span>
+                      <span className="font-semibold text-[#0B1D15]">{fmtStat(s.max, m.digits)}</span>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-[10px] text-muted-foreground">
+                    {s.count || 0} sampel
+                    {m.showTotal && s.count ? ` · Total ${fmtStat(s.sum, 0)}` : ""}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {agroByKebun.length > 0 && (
+            <div className="bg-card rounded-2xl border overflow-hidden" data-testid="agro-kebun-table">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-[#0F291E] text-white text-left">
+                      <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider">Kebun / Afdeling</th>
+                      <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-center">Data</th>
+                      {AGRO_METRICS.map((m) => (
+                        <th key={m.key} className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-right whitespace-nowrap">
+                          {m.label} (rata²)
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {agroByKebun.map((kb) => (
+                      <Fragment key={kb.kebun}>
+                        <tr className="border-t bg-lime-50/50 font-semibold" data-testid={`agro-kebun-row-${kb.kebun}`}>
+                          <td className="px-4 py-2 text-[#0F291E]">{kb.kebun}</td>
+                          <td className="px-4 py-2 text-center">{kb.count}</td>
+                          {AGRO_METRICS.map((m) => (
+                            <td key={m.key} className="px-4 py-2 text-right font-mono">
+                              {fmtStat(kb.stats[m.key].avg, m.digits)}
+                            </td>
+                          ))}
+                        </tr>
+                        {kb.afdelings.map((af) => (
+                          <tr key={`${kb.kebun}-${af.afdeling}`} className="border-t hover:bg-muted/30">
+                            <td className="px-4 py-1.5 pl-8 text-muted-foreground">Afd {af.afdeling}</td>
+                            <td className="px-4 py-1.5 text-center text-muted-foreground">{af.count}</td>
+                            {AGRO_METRICS.map((m) => (
+                              <td key={m.key} className="px-4 py-1.5 text-right font-mono text-muted-foreground">
+                                {fmtStat(af.stats[m.key].avg, m.digits)}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
+
         {/* Mini map koordinat */}
         <div className="bg-card rounded-2xl border p-4 sm:p-5 mb-6" data-testid="mini-map-card">
           <div className="flex items-center justify-between mb-3">
@@ -814,42 +1066,6 @@ export default function Dashboard() {
         {/* Controls */}
         <div className="bg-card rounded-2xl border p-4 sm:p-5 mb-6">
           <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                data-testid="search-input"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cari Kebun, Afdeling, Blok, Code LSU..."
-                className="pl-9 h-10"
-              />
-            </div>
-            <Select value={kebunFilter} onValueChange={setKebunFilter}>
-              <SelectTrigger className="w-full lg:w-48 h-10" data-testid="kebun-filter">
-                <SelectValue placeholder="Semua Kebun" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Kebun</SelectItem>
-                {kebunOptions.map((k) => (
-                  <SelectItem key={k} value={k}>
-                    {k}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={afdelingFilter} onValueChange={setAfdelingFilter}>
-              <SelectTrigger className="w-full lg:w-44 h-10" data-testid="afdeling-filter">
-                <SelectValue placeholder="Semua Afdeling" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Afdeling</SelectItem>
-                {afdelingOptions.map((a) => (
-                  <SelectItem key={a} value={String(a)}>
-                    Afdeling {a}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <div className="flex rounded-lg border overflow-hidden h-10" data-testid="status-filter">
               <button
                 type="button"
@@ -952,9 +1168,110 @@ export default function Dashboard() {
               </Button>
             </div>
           </div>
-        </div>
 
-        {/* Selection action bar */}
+          {/* Baris kedua: filter Tanggal LSU & atur kolom */}
+          <div className="mt-3 pt-3 border-t flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2" data-testid="tanggal-lsu-filter">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+                Tanggal LSU
+              </span>
+              <Input
+                type="date"
+                data-testid="tanggal-from"
+                value={tanggalFrom}
+                onChange={(e) => setTanggalFrom(e.target.value)}
+                className="h-9 w-[150px]"
+              />
+              <span className="text-muted-foreground text-sm">s/d</span>
+              <Input
+                type="date"
+                data-testid="tanggal-to"
+                value={tanggalTo}
+                onChange={(e) => setTanggalTo(e.target.value)}
+                className="h-9 w-[150px]"
+              />
+              {(tanggalFrom || tanggalTo || kategoriFilter !== "all") && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-testid="reset-extra-filters"
+                  onClick={() => {
+                    setTanggalFrom("");
+                    setTanggalTo("");
+                    setKategoriFilter("all");
+                  }}
+                  className="h-9 text-muted-foreground"
+                >
+                  Reset
+                </Button>
+              )}
+            </div>
+
+            <div className="relative sm:ml-auto">
+              <Button
+                variant="outline"
+                data-testid="column-toggle-button"
+                onClick={() => setColMenuOpen((o) => !o)}
+                className="h-9 border-[#1B4D3E]/30 text-[#1B4D3E] hover:bg-[#1B4D3E]/5"
+              >
+                <SlidersHorizontal className="w-4 h-4 mr-1.5" /> Atur Kolom ({visibleCols.size}/{DATA_COLUMNS.length})
+              </Button>
+              {colMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setColMenuOpen(false)} />
+                  <div
+                    data-testid="column-toggle-menu"
+                    className="absolute right-0 mt-2 z-50 w-72 max-h-96 overflow-y-auto rounded-xl border bg-card shadow-xl p-3"
+                  >
+                    <div className="flex items-center justify-between mb-2 pb-2 border-b">
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#1B4D3E]">Tampilkan Kolom</span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          data-testid="column-show-all"
+                          onClick={() => setVisibleCols(new Set(DATA_COLUMNS.map((c) => c[0])))}
+                          className="text-[11px] text-[#1B4D3E] hover:underline"
+                        >
+                          Semua
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="column-hide-all"
+                          onClick={() => setVisibleCols(new Set())}
+                          className="text-[11px] text-muted-foreground hover:underline"
+                        >
+                          Kosongkan
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      {DATA_COLUMNS.map(([key, label]) => (
+                        <label
+                          key={key}
+                          className="flex items-center gap-2 text-sm cursor-pointer rounded-md px-2 py-1 hover:bg-muted"
+                        >
+                          <Checkbox
+                            data-testid={`column-toggle-${key}`}
+                            checked={visibleCols.has(key)}
+                            onCheckedChange={() =>
+                              setVisibleCols((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(key)) next.delete(key);
+                                else next.add(key);
+                                return next;
+                              })
+                            }
+                          />
+                          <span>{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
         {selected.size > 0 && (
           <div
             className="bg-[#0F291E] text-white rounded-2xl px-4 sm:px-5 py-3 mb-6 flex flex-col sm:flex-row sm:items-center gap-3 justify-between fade-in"
@@ -1029,7 +1346,7 @@ export default function Dashboard() {
                       className="border-white/50 data-[state=checked]:bg-[#84CC16] data-[state=checked]:border-[#84CC16] data-[state=checked]:text-[#0F291E]"
                     />
                   </th>
-                  {["QR", "ID Actual", ...DATA_COLUMNS.map((c) => c[1]), "Status Tagging", "Aksi"].map(
+                  {["QR", "ID Actual", ...visibleColumns.map((c) => c[1]), "Status Tagging", "Aksi"].map(
                     (h) => (
                       <th key={h} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">
                         {h}
@@ -1041,13 +1358,13 @@ export default function Dashboard() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={29} className="text-center py-16 text-muted-foreground">
+                    <td colSpan={tableColSpan} className="text-center py-16 text-muted-foreground">
                       Memuat data...
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={29} className="text-center py-16 text-muted-foreground" data-testid="empty-state">
+                    <td colSpan={tableColSpan} className="text-center py-16 text-muted-foreground" data-testid="empty-state">
                       Belum ada data. Tambah manual atau impor dari Excel.
                     </td>
                   </tr>
@@ -1080,7 +1397,7 @@ export default function Dashboard() {
                         </div>
                       </td>
                       <td className="px-4 py-2 font-mono font-semibold text-[#1B4D3E] whitespace-nowrap">{r.id_actual}</td>
-                      {DATA_COLUMNS.map(([key, , kind]) => (
+                      {visibleColumns.map(([key, , kind]) => (
                         <td
                           key={key}
                           className={`px-4 py-2 whitespace-nowrap ${

@@ -223,6 +223,49 @@ def compute_sph(r: dict) -> float:
     return round(pokok / luas, 2) if luas else 0
 
 
+def _fnum(v) -> float:
+    try:
+        return float(v or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def compute_la(r: dict) -> float:
+    """Luas Daun (LA) per pokok, m2 — metode Hardon (1969) utk kelapa sawit.
+    LA = 0.55 x jumlah_anak_daun x rata2_panjang_helai(cm) x rata2_lebar_helai(cm)
+         x jumlah_pelepah / 10000.
+    Rata-rata memakai nilai helai 1 & 2 yang terisi (>0).
+    """
+    lens = [x for x in (_fnum(r.get("panjang_helai_1")), _fnum(r.get("panjang_helai_2"))) if x > 0]
+    wids = [x for x in (_fnum(r.get("lebar_helai_1")), _fnum(r.get("lebar_helai_2"))) if x > 0]
+    n = _fnum(r.get("jumlah_anak_daun"))
+    fronds = _fnum(r.get("jumlah_pelepah"))
+    if not lens or not wids or n <= 0:
+        return 0
+    mean_l = sum(lens) / len(lens)
+    mean_w = sum(wids) / len(wids)
+    la_frond = 0.55 * n * mean_l * mean_w / 10000.0  # m2 per pelepah
+    la = la_frond * fronds if fronds > 0 else la_frond
+    return round(la, 4)
+
+
+def compute_lai(r: dict) -> float:
+    """LAI (Leaf Area Index) = LA per pokok (m2) x SPH / 10000 (SPH = pokok/ha)."""
+    la = compute_la(r)
+    sph = compute_sph(r)
+    if la <= 0 or sph <= 0:
+        return 0
+    return round(la * sph / 10000.0, 4)
+
+
+def apply_derived(d: dict) -> dict:
+    """Isi field turunan otomatis: sph, la, lai."""
+    d["sph"] = compute_sph(d)
+    d["la"] = compute_la(d)
+    d["lai"] = compute_lai(d)
+    return d
+
+
 def num_out(v) -> str:
     """Format angka umum untuk ekspor: buang desimal jika bulat, koma untuk desimal."""
     if v in (None, ""):
@@ -336,7 +379,7 @@ def serialize(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
     doc["id_actual"] = build_id_actual(doc)
     doc["payload"] = build_payload(doc)
-    doc["sph"] = compute_sph(doc)
+    apply_derived(doc)
     return doc
 
 
@@ -362,7 +405,7 @@ async def stats(user: dict = Depends(get_current_user)):
 @api_router.post("/records")
 async def create_record(body: RecordInput, user: dict = Depends(get_current_user)):
     doc = body.model_dump()
-    doc["sph"] = compute_sph(doc)
+    apply_derived(doc)
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     if _is_tagged(doc):
         doc["tagged_at"] = doc["created_at"]
@@ -377,7 +420,7 @@ async def update_record(rid: str, body: RecordInput, user: dict = Depends(get_cu
     if not existing:
         raise HTTPException(status_code=404, detail="Data tidak ditemukan")
     new_data = body.model_dump()
-    new_data["sph"] = compute_sph(new_data)
+    apply_derived(new_data)
     update = {"$set": dict(new_data)}
     now_tagged = _is_tagged(new_data)
     if now_tagged and not existing.get("tagged_at"):
@@ -531,7 +574,7 @@ async def import_confirm(body: ImportConfirm, user: dict = Depends(get_current_u
     inserted = 0
     for r in body.rows:
         doc = r.model_dump()
-        doc["sph"] = compute_sph(doc)
+        apply_derived(doc)
         doc["created_at"] = datetime.now(timezone.utc).isoformat()
         if _is_tagged(doc):
             doc["tagged_at"] = doc["created_at"]
@@ -555,7 +598,7 @@ async def _fetch_docs(ids: Optional[List[str]]):
         docs = await db.records.find().sort("created_at", 1).to_list(5000)
     for d in docs:
         d["id_actual"] = build_id_actual(d)
-        d["sph"] = compute_sph(d)
+        apply_derived(d)
     return docs
 
 
@@ -605,7 +648,7 @@ def build_labels_pdf(docs, size: str = "medium") -> io.BytesIO:
         c.setFillColor(colors.HexColor("#111827"))
         line1 = " ".join(
             str(d.get(k, "")).strip()
-            for k in ("kebun", "afdeling", "blok", "code_lsu")
+            for k in ("kebun", "afdeling", "titik_sample", "blok")
             if str(d.get(k, "")).strip()
         )
         line2 = f"{fmt_num(d.get('koord_x'))} {fmt_num(d.get('koord_y'))}".strip()
