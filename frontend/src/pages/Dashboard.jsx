@@ -170,6 +170,49 @@ function fmtNum(v) {  if (v === "" || v === null || v === undefined) return "";
   return String(n).replace(".", ",");
 }
 
+// Format angka umum utk tabel (buang desimal jika bulat, koma utk desimal)
+function fmtGeneric(v) {
+  if (v === "" || v === null || v === undefined) return "";
+  const n = parseFloat(String(v).replace(",", "."));
+  if (Number.isNaN(n)) return String(v);
+  return Number.isInteger(n) ? String(n) : String(n).replace(".", ",");
+}
+
+// Kolom data tabel (selain QR, ID Actual, Status Tagging, Aksi)
+const DATA_COLUMNS = [
+  ["kebun", "Kebun", "text"],
+  ["afdeling", "Afdeling", "text"],
+  ["code_lsu", "Kode LSU", "mono"],
+  ["blok", "Block", "text"],
+  ["luas_ha", "Luas (Ha)", "num"],
+  ["jumlah_pokok", "Jumlah Pokok", "num"],
+  ["titik_sample", "Titik Sample", "text"],
+  ["koord_x", "Koordinat (X)", "coord"],
+  ["koord_y", "Koordinat (Y)", "coord"],
+  ["kategori", "Kategori", "text"],
+  ["keterangan", "Keterangan", "text"],
+  ["sph", "SPH", "num"],
+  ["jumlah_pelepah", "Jumlah pelepah", "num"],
+  ["panjang_pelepah", "Panjang pelepah (cm)", "num"],
+  ["lebar_petiol", "Lebar petiol (cm)", "num"],
+  ["tebal_petiol", "Tebal petiol (cm)", "num"],
+  ["panjang_helai_1", "Panjang helai anak daun 1 (cm)", "num"],
+  ["panjang_helai_2", "Panjang helai anak daun 2 (cm)", "num"],
+  ["lebar_helai_1", "Lebar helai anak daun 1 (cm)", "num"],
+  ["lebar_helai_2", "Lebar helai anak daun 2 (cm)", "num"],
+  ["jumlah_anak_daun", "Jumlah anak daun (helai)", "num"],
+  ["tanggal_lsu", "Tanggal LSU", "text"],
+  ["la", "LA", "num"],
+  ["lai", "LAI", "num"],
+];
+
+function cellValue(r, key, kind) {
+  const v = r[key];
+  if (kind === "coord") return fmtNum(v);
+  if (kind === "num") return fmtGeneric(v);
+  return v === null || v === undefined ? "" : String(v);
+}
+
 function payloadOf(r) {
   // Isi QR = Id Actual (gabungan Kebun+Afdeling+Blok+CodeLSU+Koord_X+Koord_Y, tanpa pemisah)
   return (
@@ -986,7 +1029,7 @@ export default function Dashboard() {
                       className="border-white/50 data-[state=checked]:bg-[#84CC16] data-[state=checked]:border-[#84CC16] data-[state=checked]:text-[#0F291E]"
                     />
                   </th>
-                  {["QR", "Id Actual", "Kebun", "Afdeling", "Blok", "Code LSU", "Koord X", "Koord Y", "Keterangan", "Aksi"].map(
+                  {["QR", "ID Actual", ...DATA_COLUMNS.map((c) => c[1]), "Status Tagging", "Aksi"].map(
                     (h) => (
                       <th key={h} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">
                         {h}
@@ -998,13 +1041,13 @@ export default function Dashboard() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={11} className="text-center py-16 text-muted-foreground">
+                    <td colSpan={29} className="text-center py-16 text-muted-foreground">
                       Memuat data...
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="text-center py-16 text-muted-foreground" data-testid="empty-state">
+                    <td colSpan={29} className="text-center py-16 text-muted-foreground" data-testid="empty-state">
                       Belum ada data. Tambah manual atau impor dari Excel.
                     </td>
                   </tr>
@@ -1036,13 +1079,19 @@ export default function Dashboard() {
                           />
                         </div>
                       </td>
-                      <td className="px-4 py-2 font-mono font-semibold text-[#1B4D3E]">{r.id_actual}</td>
-                      <td className="px-4 py-2 font-medium">{r.kebun}</td>
-                      <td className="px-4 py-2">{r.afdeling}</td>
-                      <td className="px-4 py-2">{r.blok}</td>
-                      <td className="px-4 py-2 font-mono">{r.code_lsu}</td>
-                      <td className="px-4 py-2 font-mono text-muted-foreground">{r.koord_x}</td>
-                      <td className="px-4 py-2 font-mono text-muted-foreground">{r.koord_y}</td>
+                      <td className="px-4 py-2 font-mono font-semibold text-[#1B4D3E] whitespace-nowrap">{r.id_actual}</td>
+                      {DATA_COLUMNS.map(([key, , kind]) => (
+                        <td
+                          key={key}
+                          className={`px-4 py-2 whitespace-nowrap ${
+                            kind === "mono" || kind === "coord" ? "font-mono" : ""
+                          } ${kind === "coord" ? "text-muted-foreground" : ""} ${
+                            key === "kebun" ? "font-medium" : ""
+                          }`}
+                        >
+                          {cellValue(r, key, kind)}
+                        </td>
+                      ))}
                       <td className="px-4 py-2">
                         {isTagged(r) ? (
                           <span

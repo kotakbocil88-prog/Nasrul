@@ -19,11 +19,14 @@ import bcrypt
 import jwt
 import qrcode
 import openpyxl
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.units import mm
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas as pdf_canvas
 from reportlab.lib.utils import ImageReader
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER
 
 # ---------------------------------------------------------------- DB
 mongo_url = os.environ['MONGO_URL']
@@ -47,19 +50,54 @@ class Record(BaseModel):
     afdeling: str = ""
     blok: str = ""
     code_lsu: str = ""
+    luas_ha: float = 0
+    jumlah_pokok: float = 0
+    titik_sample: str = ""
     koord_x: float = 0
     koord_y: float = 0
+    kategori: str = ""
+    keterangan: str = ""
+    sph: float = 0
+    jumlah_pelepah: float = 0
+    panjang_pelepah: float = 0
+    lebar_petiol: float = 0
+    tebal_petiol: float = 0
+    panjang_helai_1: float = 0
+    panjang_helai_2: float = 0
+    lebar_helai_1: float = 0
+    lebar_helai_2: float = 0
+    jumlah_anak_daun: float = 0
+    tanggal_lsu: str = ""
+    la: float = 0
+    lai: float = 0
     id_actual: str = ""
     created_at: Optional[str] = None
 
 
 class RecordInput(BaseModel):
-    kebun: str
-    afdeling: str
-    blok: str
-    code_lsu: str
-    koord_x: float
-    koord_y: float
+    kebun: str = ""
+    afdeling: str = ""
+    blok: str = ""
+    code_lsu: str = ""
+    luas_ha: float = 0
+    jumlah_pokok: float = 0
+    titik_sample: str = ""
+    koord_x: float = 0
+    koord_y: float = 0
+    kategori: str = ""
+    keterangan: str = ""
+    jumlah_pelepah: float = 0
+    panjang_pelepah: float = 0
+    lebar_petiol: float = 0
+    tebal_petiol: float = 0
+    panjang_helai_1: float = 0
+    panjang_helai_2: float = 0
+    lebar_helai_1: float = 0
+    lebar_helai_2: float = 0
+    jumlah_anak_daun: float = 0
+    tanggal_lsu: str = ""
+    la: float = 0
+    lai: float = 0
 
 
 class ImportRow(BaseModel):
@@ -67,8 +105,25 @@ class ImportRow(BaseModel):
     afdeling: str = ""
     blok: str = ""
     code_lsu: str = ""
+    luas_ha: float = 0
+    jumlah_pokok: float = 0
+    titik_sample: str = ""
     koord_x: float = 0
     koord_y: float = 0
+    kategori: str = ""
+    keterangan: str = ""
+    jumlah_pelepah: float = 0
+    panjang_pelepah: float = 0
+    lebar_petiol: float = 0
+    tebal_petiol: float = 0
+    panjang_helai_1: float = 0
+    panjang_helai_2: float = 0
+    lebar_helai_1: float = 0
+    lebar_helai_2: float = 0
+    jumlah_anak_daun: float = 0
+    tanggal_lsu: str = ""
+    la: float = 0
+    lai: float = 0
 
 
 class ImportConfirm(BaseModel):
@@ -158,6 +213,68 @@ def build_id_actual(r: dict) -> str:
             f"{fmt_num(r.get('koord_x'))}{fmt_num(r.get('koord_y'))}")
 
 
+def compute_sph(r: dict) -> float:
+    """SPH (Stand Per Hectare) = Jumlah Pokok / Luas (Ha). Dibulatkan 2 desimal."""
+    try:
+        luas = float(r.get("luas_ha") or 0)
+        pokok = float(r.get("jumlah_pokok") or 0)
+    except (TypeError, ValueError):
+        return 0
+    return round(pokok / luas, 2) if luas else 0
+
+
+def num_out(v) -> str:
+    """Format angka umum untuk ekspor: buang desimal jika bulat, koma untuk desimal."""
+    if v in (None, ""):
+        return ""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    if f == int(f):
+        return str(int(f))
+    return repr(round(f, 4)).replace(".", ",")
+
+
+# Definisi kolom data (key, judul) — dipakai bersama untuk Excel & PDF
+FIELD_COLUMNS = [
+    ("id_actual", "ID Actual", "text"),
+    ("kebun", "Kebun", "text"),
+    ("afdeling", "Afdeling", "text"),
+    ("code_lsu", "Kode LSU", "text"),
+    ("blok", "Block", "text"),
+    ("luas_ha", "Luas (Ha)", "num"),
+    ("jumlah_pokok", "Jumlah Pokok", "num"),
+    ("titik_sample", "Titik Sample", "text"),
+    ("koord_x", "Koordinat (X)", "coord"),
+    ("koord_y", "Koordinat (Y)", "coord"),
+    ("kategori", "Kategori", "text"),
+    ("keterangan", "Keterangan", "text"),
+    ("sph", "SPH", "num"),
+    ("jumlah_pelepah", "Jumlah pelepah", "num"),
+    ("panjang_pelepah", "Panjang pelepah (cm)", "num"),
+    ("lebar_petiol", "Lebar petiol (cm)", "num"),
+    ("tebal_petiol", "Tebal petiol (cm)", "num"),
+    ("panjang_helai_1", "Panjang helai anak daun 1 (cm)", "num"),
+    ("panjang_helai_2", "Panjang helai anak daun 2 (cm)", "num"),
+    ("lebar_helai_1", "Lebar helai anak daun 1 (cm)", "num"),
+    ("lebar_helai_2", "Lebar helai anak daun 2 (cm)", "num"),
+    ("jumlah_anak_daun", "Jumlah anak daun (helai)", "num"),
+    ("tanggal_lsu", "Tanggal LSU", "text"),
+    ("la", "LA", "num"),
+    ("lai", "LAI", "num"),
+]
+
+
+def col_value(d: dict, key: str, kind: str) -> str:
+    v = d.get(key, "")
+    if kind == "coord":
+        return fmt_num(v)
+    if kind == "num":
+        return num_out(v)
+    return "" if v is None else str(v)
+
+
 def build_payload(r: dict) -> str:
     """Isi QR = sama persis dengan Id Actual (nilai tergabung tanpa label/pemisah)."""
     return build_id_actual(r)
@@ -219,6 +336,7 @@ def serialize(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
     doc["id_actual"] = build_id_actual(doc)
     doc["payload"] = build_payload(doc)
+    doc["sph"] = compute_sph(doc)
     return doc
 
 
@@ -244,6 +362,7 @@ async def stats(user: dict = Depends(get_current_user)):
 @api_router.post("/records")
 async def create_record(body: RecordInput, user: dict = Depends(get_current_user)):
     doc = body.model_dump()
+    doc["sph"] = compute_sph(doc)
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     if _is_tagged(doc):
         doc["tagged_at"] = doc["created_at"]
@@ -258,6 +377,7 @@ async def update_record(rid: str, body: RecordInput, user: dict = Depends(get_cu
     if not existing:
         raise HTTPException(status_code=404, detail="Data tidak ditemukan")
     new_data = body.model_dump()
+    new_data["sph"] = compute_sph(new_data)
     update = {"$set": dict(new_data)}
     now_tagged = _is_tagged(new_data)
     if now_tagged and not existing.get("tagged_at"):
@@ -296,11 +416,22 @@ async def download_template(user: dict = Depends(get_current_user)):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Template"
-    headers = ["Kebun", "Afdeling", "Blok", "Code_LSU", "Koord_X", "Koord_Y"]
+    headers = [
+        "Kebun", "Afdeling", "Kode LSU", "Block", "Luas (Ha)", "Jumlah Pokok",
+        "Titik Sample", "Koordinat (X)", "Koordinat (Y)", "Kategori", "Keterangan",
+        "Jumlah pelepah", "Panjang pelepah (cm)", "Lebar petiol (cm)", "Tebal petiol (cm)",
+        "Panjang helai anak daun 1 (cm)", "Panjang helai anak daun 2 (cm)",
+        "Lebar helai anak daun 1 (cm)", "Lebar helai anak daun 2 (cm)",
+        "Jumlah anak daun (helai)", "Tanggal LSU", "LA", "LAI",
+    ]
     ws.append(headers)
-    ws.append(["Kebun A", "OA", "B01", "LSU-001", 102.345, -1.234])
+    ws.append([
+        "KSL", "OA", "TS01", "OA11", 4.5, 630, "TS-01", 110.400113, 0.654521,
+        "Kategori A", "Contoh keterangan", 40, 550, 5.2, 3.1,
+        120, 118, 6.5, 6.3, 250, "2025-07-01", 12.5, 3.2,
+    ])
     for i, _ in enumerate(headers, 1):
-        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = 16
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = 18
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     return StreamingResponse(
         buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -327,16 +458,47 @@ def parse_excel(content: bytes) -> List[dict]:
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
         raise HTTPException(status_code=400, detail="File kosong")
-    header = [(_cell(h)).lower().replace(" ", "").replace("_", "") for h in rows[0]]
 
-    def idx(*names):
-        for n in names:
-            if n in header:
-                return header.index(n)
+    def norm(s):
+        return "".join(ch for ch in str(s or "").lower() if ch.isalnum())
+
+    header = [norm(h) for h in rows[0]]
+
+    # field -> (kind, [normalized aliases])
+    FIELD_ALIASES = {
+        "kebun": ("text", ["kebun"]),
+        "afdeling": ("text", ["afdeling", "afd"]),
+        "code_lsu": ("text", ["kodelsu", "codelsu", "lsu"]),
+        "blok": ("text", ["block", "blok"]),
+        "luas_ha": ("num", ["luasha", "luas"]),
+        "jumlah_pokok": ("num", ["jumlahpokok", "pokok"]),
+        "titik_sample": ("text", ["titiksample", "titiksampel"]),
+        "koord_x": ("num", ["koordinatx", "koordx", "x"]),
+        "koord_y": ("num", ["koordinaty", "koordy", "y"]),
+        "kategori": ("text", ["kategori"]),
+        "keterangan": ("text", ["keterangan"]),
+        "jumlah_pelepah": ("num", ["jumlahpelepah"]),
+        "panjang_pelepah": ("num", ["panjangpelepahcm", "panjangpelepah"]),
+        "lebar_petiol": ("num", ["lebarpetiolcm", "lebarpetiol"]),
+        "tebal_petiol": ("num", ["tebalpetiolcm", "tebalpetiol"]),
+        "panjang_helai_1": ("num", ["panjanghelaianakdaun1cm", "panjanghelaianakdaun1", "panjanghelai1"]),
+        "panjang_helai_2": ("num", ["panjanghelaianakdaun2cm", "panjanghelaianakdaun2", "panjanghelai2"]),
+        "lebar_helai_1": ("num", ["lebarhelaianakdaun1cm", "lebarhelaianakdaun1", "lebarhelai1"]),
+        "lebar_helai_2": ("num", ["lebarhelaianakdaun2cm", "lebarhelaianakdaun2", "lebarhelai2"]),
+        "jumlah_anak_daun": ("num", ["jumlahanakdaunhelai", "jumlahanakdaun"]),
+        "tanggal_lsu": ("text", ["tanggallsu"]),
+        "la": ("num", ["la"]),
+        "lai": ("num", ["lai"]),
+    }
+
+    def find_idx(aliases):
+        for a in aliases:
+            if a in header:
+                return header.index(a)
         return None
 
-    ik, ia, ib, il, ix, iy = (idx("kebun"), idx("afdeling"), idx("blok"),
-                              idx("codelsu", "lsu"), idx("koordx", "x"), idx("koordy", "y"))
+    field_idx = {f: (kind, find_idx(al)) for f, (kind, al) in FIELD_ALIASES.items()}
+
     parsed = []
     for row in rows[1:]:
         if row is None or all(c is None or _cell(c) == "" for c in row):
@@ -348,12 +510,12 @@ def parse_excel(content: bytes) -> List[dict]:
         def gn(i):
             return _num(row[i]) if i is not None and i < len(row) else 0.0
 
-        if not (g(ik) or g(ib) or g(il)):
+        rec = {}
+        for f, (kind, i) in field_idx.items():
+            rec[f] = gn(i) if kind == "num" else g(i)
+        if not (rec.get("kebun") or rec.get("blok") or rec.get("code_lsu")):
             continue
-        parsed.append({
-            "kebun": g(ik), "afdeling": g(ia), "blok": g(ib), "code_lsu": g(il),
-            "koord_x": gn(ix), "koord_y": gn(iy),
-        })
+        parsed.append(rec)
     return parsed
 
 
@@ -369,6 +531,7 @@ async def import_confirm(body: ImportConfirm, user: dict = Depends(get_current_u
     inserted = 0
     for r in body.rows:
         doc = r.model_dump()
+        doc["sph"] = compute_sph(doc)
         doc["created_at"] = datetime.now(timezone.utc).isoformat()
         if _is_tagged(doc):
             doc["tagged_at"] = doc["created_at"]
@@ -392,6 +555,7 @@ async def _fetch_docs(ids: Optional[List[str]]):
         docs = await db.records.find().sort("created_at", 1).to_list(5000)
     for d in docs:
         d["id_actual"] = build_id_actual(d)
+        d["sph"] = compute_sph(d)
     return docs
 
 
@@ -474,53 +638,72 @@ def _is_tagged(d) -> bool:
 
 def build_table_pdf(docs) -> io.BytesIO:
     buf = io.BytesIO()
-    c = pdf_canvas.Canvas(buf, pagesize=A4)
-    pw, ph = A4
-    margin = 14 * mm
-    y = ph - margin
-    c.setFillColor(colors.HexColor("#0F291E"))
-    c.setFont("Helvetica-Bold", 15)
-    c.drawString(margin, y, "Laporan Data Kebun & Label QR")
-    y -= 8 * mm
-    c.setFont("Helvetica", 9)
-    c.setFillColor(colors.HexColor("#4B5563"))
-    c.drawString(margin, y, f"Total {len(docs)} data  -  {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-    y -= 8 * mm
+    page = landscape(A4)
+    pw, ph = page
+    margin = 12 * mm
+    doc_tpl = SimpleDocTemplate(
+        buf, pagesize=page,
+        leftMargin=margin, rightMargin=margin, topMargin=margin, bottomMargin=margin)
 
-    row_h = 30 * mm
-    qr_size = 26 * mm
+    hstyle = ParagraphStyle("h", fontName="Helvetica-Bold", fontSize=5.2,
+                            leading=6, textColor=colors.white, alignment=TA_CENTER)
+    cstyle = ParagraphStyle("c", fontName="Helvetica", fontSize=5.2,
+                            leading=6, textColor=colors.HexColor("#1F2937"), alignment=TA_CENTER)
+    title_style = ParagraphStyle("t", fontName="Helvetica-Bold", fontSize=14,
+                                 textColor=colors.HexColor("#0F291E"))
+    sub_style = ParagraphStyle("s", fontName="Helvetica", fontSize=8,
+                               textColor=colors.HexColor("#4B5563"))
+
+    columns = FIELD_COLUMNS + [("_status", "Keterangan Tagging", "text")]
+    # bobot lebar kolom relatif
+    weights = {
+        "id_actual": 4.2, "kebun": 1.4, "afdeling": 1.2, "code_lsu": 1.4, "blok": 1.4,
+        "luas_ha": 1.1, "jumlah_pokok": 1.3, "titik_sample": 1.4, "koord_x": 1.9,
+        "koord_y": 1.9, "kategori": 1.6, "keterangan": 2.0, "sph": 1.0,
+        "jumlah_pelepah": 1.3, "panjang_pelepah": 1.4, "lebar_petiol": 1.3,
+        "tebal_petiol": 1.3, "panjang_helai_1": 1.5, "panjang_helai_2": 1.5,
+        "lebar_helai_1": 1.4, "lebar_helai_2": 1.4, "jumlah_anak_daun": 1.5,
+        "tanggal_lsu": 1.6, "la": 0.9, "lai": 0.9, "_status": 1.8,
+    }
+    usable = pw - 2 * margin
+    total_w = sum(weights[k] for (k, _t, _knd) in columns)
+    col_widths = [usable * weights[k] / total_w for (k, _t, _knd) in columns]
+
+    header_row = [Paragraph(title, hstyle) for (_k, title, _t) in columns]
+    data = [header_row]
     for d in docs:
-        if y - row_h < margin:
-            c.showPage(); y = ph - margin
-        c.setStrokeColor(colors.HexColor("#E2E8F0")); c.setLineWidth(0.5)
-        c.roundRect(margin, y - row_h, pw - 2 * margin, row_h, 3, stroke=1, fill=0)
-        _draw_qr(c, build_payload(d), margin + 4 * mm, y - qr_size - 2 * mm, qr_size)
-        tx = margin + qr_size + 10 * mm
-        c.setFillColor(colors.HexColor("#0F291E"))
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(tx, y - 8 * mm, f"ID Actual: {d.get('id_actual','')}")
-        c.setFont("Helvetica", 9)
-        c.setFillColor(colors.HexColor("#1B4D3E"))
-        line1 = f"Kebun: {d.get('kebun','')}   Afdeling: {d.get('afdeling','')}   Blok: {d.get('blok','')}   Code LSU: {d.get('code_lsu','')}"
-        line2 = f"Koord X: {d.get('koord_x','')}   Koord Y: {d.get('koord_y','')}"
-        c.drawString(tx, y - 15 * mm, line1[:70])
-        c.setFillColor(colors.HexColor("#4B5563"))
-        c.drawString(tx, y - 21 * mm, line2[:70])
-        # Keterangan status tagging
-        tagged = _is_tagged(d)
-        status_text = "Sudah di-tagging" if tagged else "Belum di-tagging"
-        status_color = colors.HexColor("#047857") if tagged else colors.HexColor("#B45309")
-        c.setFont("Helvetica-Bold", 9)
-        c.setFillColor(colors.HexColor("#0F291E"))
-        c.drawString(tx, y - 27 * mm, "Keterangan: ")
-        kw = c.stringWidth("Keterangan: ", "Helvetica-Bold", 9)
-        c.setFillColor(status_color)
-        c.drawString(tx + kw, y - 27 * mm, status_text)
-        y -= row_h + 3 * mm
+        row = []
+        for (k, _title, knd) in columns:
+            if k == "_status":
+                val = "Sudah di-tagging" if _is_tagged(d) else "Belum di-tagging"
+            else:
+                val = col_value(d, k, knd)
+            row.append(Paragraph(str(val), cstyle))
+        data.append(row)
+
+    elements = [
+        Paragraph("Laporan Data Kebun & Label QR", title_style),
+        Spacer(1, 3 * mm),
+        Paragraph(f"Total {len(docs)} data  -  {datetime.now().strftime('%d/%m/%Y %H:%M')}", sub_style),
+        Spacer(1, 4 * mm),
+    ]
     if not docs:
-        c.setFont("Helvetica", 12)
-        c.drawCentredString(pw / 2, ph / 2, "Tidak ada data")
-    c.showPage(); c.save(); buf.seek(0)
+        elements.append(Paragraph("Tidak ada data", sub_style))
+    else:
+        tbl = Table(data, colWidths=col_widths, repeatRows=1)
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F291E")),
+            ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#CBD5E1")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ("LEFTPADDING", (0, 0), (-1, -1), 1.5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 1.5),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F1F5F9")]),
+        ]))
+        elements.append(tbl)
+    doc_tpl.build(elements)
+    buf.seek(0)
     return buf
 
 
@@ -531,10 +714,10 @@ def build_untagged_pdf(docs) -> io.BytesIO:
     pw, ph = A4
     margin = 14 * mm
 
-    # kolom: No | Kebun | Afdeling | Blok | Code LSU | Koord X (isi) | Koord Y (isi)
-    col_x = [margin, margin + 14 * mm, margin + 44 * mm, margin + 66 * mm,
-             margin + 90 * mm, margin + 116 * mm, margin + 150 * mm, pw - margin]
-    headers = ["No", "Kebun", "Afdeling", "Blok", "Code LSU", "Koord X", "Koord Y"]
+    # kolom: No | Kebun | Afdeling | Blok | Code LSU | Titik Sample | Koord X (isi) | Koord Y (isi)
+    col_x = [margin, margin + 12 * mm, margin + 40 * mm, margin + 60 * mm,
+             margin + 82 * mm, margin + 108 * mm, margin + 140 * mm, margin + 172 * mm, pw - margin]
+    headers = ["No", "Kebun", "Afdeling", "Blok", "Code LSU", "Titik Sample", "Koord X", "Koord Y"]
     row_h = 8 * mm
 
     def draw_header(y):
@@ -569,7 +752,8 @@ def build_untagged_pdf(docs) -> io.BytesIO:
             c.line(col_x[i], y - row_h, col_x[i], y)
         c.setFillColor(colors.HexColor("#1F2937"))
         vals = [str(idx), str(d.get("kebun", "")), str(d.get("afdeling", "")),
-                str(d.get("blok", "")), str(d.get("code_lsu", "")), "", ""]
+                str(d.get("blok", "")), str(d.get("code_lsu", "")),
+                str(d.get("titik_sample", "")), "", ""]
         for i, v in enumerate(vals):
             c.drawString(col_x[i] + 2 * mm, y - row_h + 2.6 * mm, v[:20])
         y -= row_h
@@ -621,14 +805,16 @@ def build_untagged_excel(docs) -> io.BytesIO:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Belum di-tagging"
-    headers = ["No", "Kebun", "Afdeling", "Blok", "Code_LSU", "Koord_X", "Koord_Y", "Keterangan"]
+    headers = ["No", "Kebun", "Afdeling", "Blok", "Code_LSU", "Titik Sample", "Luas (Ha)", "Jumlah Pokok", "Koord_X", "Koord_Y", "Keterangan"]
     ws.append(headers)
     for i, d in enumerate(docs, 1):
         ws.append([
             i, d.get("kebun", ""), d.get("afdeling", ""), d.get("blok", ""),
-            d.get("code_lsu", ""), "", "", "Belum di-tagging",
+            d.get("code_lsu", ""), d.get("titik_sample", ""),
+            num_out(d.get("luas_ha")), num_out(d.get("jumlah_pokok")),
+            "", "", "Belum di-tagging",
         ])
-    widths = [6, 16, 12, 12, 14, 16, 16, 18]
+    widths = [6, 16, 12, 12, 14, 16, 12, 14, 16, 16, 18]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
     for cell in ws[1]:
@@ -669,19 +855,16 @@ def build_excel(docs) -> io.BytesIO:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Data Kebun"
-    headers = ["Id Actual", "Kebun", "Afdeling", "Blok", "Code_LSU", "Koord_X", "Koord_Y", "Keterangan"]
+    headers = [title for (_k, title, _t) in FIELD_COLUMNS] + ["QR (isi)", "Status Tagging"]
     ws.append(headers)
     for d in docs:
-        ws.append([
-            d.get("id_actual", ""), d.get("kebun", ""), d.get("afdeling", ""),
-            d.get("blok", ""), d.get("code_lsu", ""),
-            fmt_num(d.get("koord_x")), fmt_num(d.get("koord_y")),
-            "Sudah di-tagging" if _is_tagged(d) else "Belum di-tagging",
-        ])
-    widths = [30, 16, 12, 12, 14, 16, 16, 18]
-    for i, w in enumerate(widths, 1):
-        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
-    # header bold
+        row = [col_value(d, k, t) for (k, _title, t) in FIELD_COLUMNS]
+        row.append(build_payload(d))
+        row.append("Sudah di-tagging" if _is_tagged(d) else "Belum di-tagging")
+        ws.append(row)
+    for i, _ in enumerate(headers, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = 18
+    ws.column_dimensions["A"].width = 30
     for cell in ws[1]:
         cell.font = openpyxl.styles.Font(bold=True)
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)

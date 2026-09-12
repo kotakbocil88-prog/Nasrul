@@ -12,6 +12,32 @@ import { UploadCloud, FileSpreadsheet, Download } from "lucide-react";
 import { toast } from "sonner";
 import api, { API, formatApiErrorDetail } from "@/lib/api";
 
+const PREVIEW_COLS = [
+  ["kebun", "Kebun"],
+  ["afdeling", "Afdeling"],
+  ["code_lsu", "Kode LSU"],
+  ["blok", "Block"],
+  ["luas_ha", "Luas (Ha)"],
+  ["jumlah_pokok", "Jumlah Pokok"],
+  ["titik_sample", "Titik Sample"],
+  ["koord_x", "Koord X"],
+  ["koord_y", "Koord Y"],
+  ["kategori", "Kategori"],
+  ["keterangan", "Keterangan"],
+  ["jumlah_pelepah", "Jml pelepah"],
+  ["panjang_pelepah", "Pjg pelepah"],
+  ["lebar_petiol", "Lbr petiol"],
+  ["tebal_petiol", "Tbl petiol"],
+  ["panjang_helai_1", "Pjg helai 1"],
+  ["panjang_helai_2", "Pjg helai 2"],
+  ["lebar_helai_1", "Lbr helai 1"],
+  ["lebar_helai_2", "Lbr helai 2"],
+  ["jumlah_anak_daun", "Jml anak daun"],
+  ["tanggal_lsu", "Tanggal LSU"],
+  ["la", "LA"],
+  ["lai", "LAI"],
+];
+
 export function ImportDialog({ open, onOpenChange, onImported }) {
   const [file, setFile] = useState(null);
   const [dragging, setDragging] = useState(false);
@@ -105,7 +131,7 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
           onClick={downloadTemplate}
           className="flex items-center gap-2 text-sm text-[#1B4D3E] hover:text-[#0F291E] font-medium transition-colors"
         >
-          <Download className="w-4 h-4" /> Unduh template Excel (Kebun, Afdeling, Blok, Code_LSU, Koord_X, Koord_Y)
+          <Download className="w-4 h-4" /> Unduh template Excel (Kebun, Afdeling, Kode LSU, Block, Luas, Jumlah Pokok, Titik Sample, Koordinat, Kategori, Keterangan, pengukuran daun, Tanggal LSU, LA, LAI)
         </button>
 
         {rows === null ? (
@@ -167,20 +193,19 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-[#0F291E] text-white">
                   <tr className="text-left">
-                    {["Kebun", "Afdeling", "Blok", "Code LSU", "Koord X", "Koord Y"].map((h) => (
-                      <th key={h} className="px-3 py-2 font-semibold whitespace-nowrap">{h}</th>
+                    {PREVIEW_COLS.map(([, label]) => (
+                      <th key={label} className="px-3 py-2 font-semibold whitespace-nowrap">{label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((r, i) => (
                     <tr key={i} className="border-t hover:bg-muted/40">
-                      <td className="px-3 py-1.5 font-medium">{r.kebun}</td>
-                      <td className="px-3 py-1.5">{r.afdeling}</td>
-                      <td className="px-3 py-1.5">{r.blok}</td>
-                      <td className="px-3 py-1.5 font-mono">{r.code_lsu}</td>
-                      <td className="px-3 py-1.5 font-mono text-muted-foreground">{r.koord_x}</td>
-                      <td className="px-3 py-1.5 font-mono text-muted-foreground">{r.koord_y}</td>
+                      {PREVIEW_COLS.map(([key]) => (
+                        <td key={key} className="px-3 py-1.5 whitespace-nowrap">
+                          {r[key] === null || r[key] === undefined ? "" : String(r[key])}
+                        </td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>

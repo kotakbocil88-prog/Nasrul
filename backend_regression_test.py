@@ -11,7 +11,7 @@ import json
 import sys
 
 # Base URL from frontend/.env
-BASE_URL = "https://kotakbocil-prog.preview.emergentagent.com/api"
+BASE_URL = "https://prog-nasrul.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@kebun.id"
