@@ -342,6 +342,7 @@ export default function Dashboard() {
   const [labelSize, setLabelSize] = useState("medium");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewIds, setPreviewIds] = useState(null); // null = semua data, array = terpilih
+  const [previewSource, setPreviewSource] = useState("all"); // all | filter | selected
 
   const load = async () => {
     setLoading(true);
@@ -629,10 +630,31 @@ export default function Dashboard() {
     }
   };
 
-  const openPreview = (ids = null) => {
+  const openPreview = (ids = null, source = ids ? "selected" : "all") => {
     setPreviewIds(ids);
+    setPreviewSource(source);
     setPreviewOpen(true);
   };
+
+  // Cetak label sesuai kriteria/filter yang sedang aktif di dashboard
+  const openFilteredPreview = () => {
+    const allShown = filtered.length === records.length;
+    openPreview(allShown ? null : filtered.map((r) => r._id), allShown ? "all" : "filter");
+  };
+
+  // Ringkasan kriteria aktif untuk ditampilkan di dialog cetak
+  const activeCriteria = useMemo(() => {
+    const parts = [];
+    if (search.trim()) parts.push(`Cari: "${search.trim()}"`);
+    if (kebunFilter !== "all") parts.push(`Kebun: ${kebunFilter}`);
+    if (afdelingFilter !== "all") parts.push(`Afdeling: ${afdelingFilter}`);
+    if (kategoriFilter !== "all") parts.push(`Kategori: ${kategoriFilter}`);
+    if (statusFilter === "tagged") parts.push("Sudah di-tagging");
+    if (statusFilter === "untagged") parts.push("Belum di-tagging");
+    if (tanggalFrom) parts.push(`Dari: ${tanggalFrom}`);
+    if (tanggalTo) parts.push(`Sampai: ${tanggalTo}`);
+    return parts;
+  }, [search, kebunFilter, afdelingFilter, kategoriFilter, statusFilter, tanggalFrom, tanggalTo]);
 
   const previewDocs = useMemo(() => {
     if (previewIds) return records.filter((r) => previewIds.includes(r._id));
@@ -1145,11 +1167,11 @@ export default function Dashboard() {
               )}
               <Button
                 data-testid="export-labels-button"
-                onClick={() => openPreview(null)}
+                onClick={openFilteredPreview}
                 variant="outline"
                 className="h-10 border-[#84CC16]/50 text-[#4d7c0f] hover:bg-lime-50"
               >
-                <Tags className="w-4 h-4 mr-1.5" /> Pratinjau & Cetak Label
+                <Tags className="w-4 h-4 mr-1.5" /> Cetak Label ({filtered.length})
               </Button>
               <Button
                 data-testid="export-table-button"
@@ -1312,7 +1334,7 @@ export default function Dashboard() {
             <div className="flex flex-wrap gap-2">
               <Button
                 data-testid="print-selected-labels-button"
-                onClick={() => openPreview([...selected])}
+                onClick={() => openPreview([...selected], "selected")}
                 size="sm"
                 className="bg-[#84CC16] hover:bg-[#65a30d] text-[#0F291E] font-semibold"
               >
@@ -1566,10 +1588,28 @@ export default function Dashboard() {
               <Tags className="w-5 h-5 text-[#4d7c0f]" /> Pratinjau Label QR
             </DialogTitle>
             <DialogDescription>
-              {previewIds ? `${previewDocs.length} lokasi terpilih` : `Semua data (${previewDocs.length} lokasi)`} ·
-              Ukuran {LABEL_SIZES[labelSize].name} ({LABEL_SIZES[labelSize].perPage} label / halaman A4)
+              {previewSource === "selected"
+                ? `${previewDocs.length} lokasi terpilih (dari centang)`
+                : previewSource === "filter"
+                ? `${previewDocs.length} lokasi sesuai filter`
+                : `Semua data (${previewDocs.length} lokasi)`}{" "}
+              · Ukuran {LABEL_SIZES[labelSize].name} ({LABEL_SIZES[labelSize].perPage} label / halaman A4)
             </DialogDescription>
           </DialogHeader>
+
+          {previewSource === "filter" && activeCriteria.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 -mt-1" data-testid="preview-criteria">
+              <span className="text-xs text-muted-foreground">Kriteria:</span>
+              {activeCriteria.map((c, i) => (
+                <span
+                  key={i}
+                  className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#84CC16]/15 text-[#4d7c0f] border border-[#84CC16]/30"
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+          )}
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-y py-3">
             <div className="flex items-center gap-2">
