@@ -289,14 +289,20 @@ function isTagged(r) {
   return hasCoord(r.koord_x) && hasCoord(r.koord_y);
 }
 
-// Tanda "Baru": data yang ditambahkan/di-upload dalam 24 jam terakhir (berdasarkan created_at)
+// Tanda "Baru": data yang ditambahkan/di-upload dalam rentang tertentu (default 24 jam) berdasarkan created_at
 const NEW_WINDOW_MS = 24 * 60 * 60 * 1000;
-function isNew(r) {
-  if (!r || !r.created_at) return false;
+function isNew(r, windowMs = NEW_WINDOW_MS) {
+  if (!r || !r.created_at || !windowMs) return false;
   const t = new Date(r.created_at).getTime();
   if (Number.isNaN(t)) return false;
-  return Date.now() - t <= NEW_WINDOW_MS;
+  return Date.now() - t <= windowMs;
 }
+
+const NEW_RANGE_OPTIONS = [
+  { value: "1", label: "24 jam", days: 1 },
+  { value: "3", label: "3 hari", days: 3 },
+  { value: "7", label: "7 hari", days: 7 },
+];
 
 
 const LABEL_SIZES = {
@@ -333,6 +339,8 @@ export default function Dashboard() {
   const [kebunFilter, setKebunFilter] = useState("all");
   const [afdelingFilter, setAfdelingFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all"); // all | tagged | untagged
+  const [newRange, setNewRange] = useState("1"); // "1" | "3" | "7" (hari)
+  const [onlyNew, setOnlyNew] = useState(false);
   const [kategoriFilter, setKategoriFilter] = useState("all");
   const [tanggalFrom, setTanggalFrom] = useState("");
   const [tanggalTo, setTanggalTo] = useState("");
@@ -439,11 +447,23 @@ export default function Dashboard() {
     }));
   }, [progress]);
 
+  const newWindowMs = useMemo(
+    () => (parseInt(newRange, 10) || 1) * 24 * 60 * 60 * 1000,
+    [newRange]
+  );
+
   const filtered = useMemo(() => {
-    if (statusFilter === "tagged") return baseFiltered.filter((r) => isTagged(r));
-    if (statusFilter === "untagged") return baseFiltered.filter((r) => !isTagged(r));
-    return baseFiltered;
-  }, [baseFiltered, statusFilter]);
+    let out = baseFiltered;
+    if (statusFilter === "tagged") out = out.filter((r) => isTagged(r));
+    else if (statusFilter === "untagged") out = out.filter((r) => !isTagged(r));
+    if (onlyNew) out = out.filter((r) => isNew(r, newWindowMs));
+    return out;
+  }, [baseFiltered, statusFilter, onlyNew, newWindowMs]);
+
+  const newCount = useMemo(
+    () => baseFiltered.reduce((n, r) => n + (isNew(r, newWindowMs) ? 1 : 0), 0),
+    [baseFiltered, newWindowMs]
+  );
 
   const breakdown = useMemo(() => {
     const map = {};
@@ -646,10 +666,21 @@ export default function Dashboard() {
     setPreviewOpen(true);
   };
 
+  // Apakah ada filter/kriteria yang sedang aktif?
+  const anyFilterActive =
+    !!search.trim() ||
+    kebunFilter !== "all" ||
+    afdelingFilter !== "all" ||
+    kategoriFilter !== "all" ||
+    statusFilter !== "all" ||
+    !!tanggalFrom ||
+    !!tanggalTo ||
+    onlyNew;
+
   // Cetak label sesuai kriteria/filter yang sedang aktif di dashboard
   const openFilteredPreview = () => {
-    const allShown = filtered.length === records.length;
-    openPreview(allShown ? null : filtered.map((r) => r._id), allShown ? "all" : "filter");
+    if (!anyFilterActive) openPreview(null, "all");
+    else openPreview(filtered.map((r) => r._id), "filter");
   };
 
   // Ringkasan kriteria aktif untuk ditampilkan di dialog cetak
@@ -661,10 +692,11 @@ export default function Dashboard() {
     if (kategoriFilter !== "all") parts.push(`Kategori: ${kategoriFilter}`);
     if (statusFilter === "tagged") parts.push("Sudah di-tagging");
     if (statusFilter === "untagged") parts.push("Belum di-tagging");
+    if (onlyNew) parts.push("Baru");
     if (tanggalFrom) parts.push(`Dari: ${tanggalFrom}`);
     if (tanggalTo) parts.push(`Sampai: ${tanggalTo}`);
     return parts;
-  }, [search, kebunFilter, afdelingFilter, kategoriFilter, statusFilter, tanggalFrom, tanggalTo]);
+  }, [search, kebunFilter, afdelingFilter, kategoriFilter, statusFilter, onlyNew, tanggalFrom, tanggalTo]);
 
   const previewDocs = useMemo(() => {
     if (previewIds) return records.filter((r) => previewIds.includes(r._id));
@@ -1117,7 +1149,7 @@ export default function Dashboard() {
               Perbesar
             </Button>
           </div>
-          <CoordinateMap records={filtered} height={220} testId="mini-coordinate-chart" />
+          <CoordinateMap records={filtered} height={220} testId="mini-coordinate-chart" newWindowMs={newWindowMs} newLabel={`Baru (${NEW_RANGE_OPTIONS.find((o) => o.value === newRange)?.label || "24 jam"})`} />
         </div>
 
         {/* Controls */}
@@ -1154,6 +1186,41 @@ export default function Dashboard() {
               >
                 Belum
               </button>
+            </div>
+            {/* Filter cepat "Baru" + rentang */}
+            <div className="flex items-center gap-2" data-testid="new-filter-group">
+              <button
+                type="button"
+                data-testid="filter-new-toggle"
+                onClick={() => setOnlyNew((v) => !v)}
+                title="Tampilkan hanya data yang baru ditambahkan / di-upload"
+                className={`inline-flex items-center gap-1.5 h-10 px-3 rounded-lg border text-sm font-medium transition-colors whitespace-nowrap ${
+                  onlyNew
+                    ? "bg-sky-600 text-white border-sky-600"
+                    : "bg-white text-sky-700 border-sky-200 hover:bg-sky-50"
+                }`}
+              >
+                <Sparkles className="w-4 h-4" /> Baru
+                <span
+                  className={`ml-0.5 rounded-full px-1.5 text-[11px] font-bold ${
+                    onlyNew ? "bg-white/20 text-white" : "bg-sky-100 text-sky-700"
+                  }`}
+                >
+                  {newCount}
+                </span>
+              </button>
+              <Select value={newRange} onValueChange={setNewRange}>
+                <SelectTrigger className="h-10 w-28" data-testid="new-range-select" title="Rentang waktu dianggap 'Baru'">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {NEW_RANGE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex flex-wrap gap-2">
               {isAdmin && (
@@ -1260,6 +1327,7 @@ export default function Dashboard() {
                     setTanggalFrom("");
                     setTanggalTo("");
                     setKategoriFilter("all");
+                    setOnlyNew(false);
                   }}
                   className="h-9 text-muted-foreground"
                 >
@@ -1439,7 +1507,7 @@ export default function Dashboard() {
                       className={`border-t transition-colors row-in ${
                         selected.has(r._id)
                           ? "bg-lime-50"
-                          : isNew(r)
+                          : isNew(r, newWindowMs)
                           ? "bg-sky-50/60 hover:bg-sky-50"
                           : "hover:bg-muted/40"
                       }`}
@@ -1466,10 +1534,10 @@ export default function Dashboard() {
                       <td className="px-4 py-2 font-mono font-semibold text-[#1B4D3E] whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <span>{r.id_actual}</span>
-                          {isNew(r) && (
+                          {isNew(r, newWindowMs) && (
                             <span
                               data-testid={`badge-new-${r._id}`}
-                              title="Baru ditambahkan / di-upload (24 jam terakhir)"
+                              title="Baru ditambahkan / di-upload"
                               className="inline-flex items-center gap-1 rounded-full bg-sky-100 text-sky-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
                             >
                               <Sparkles className="w-3 h-3" /> Baru
@@ -1734,7 +1802,7 @@ export default function Dashboard() {
               {kebunFilter !== "all" ? ` pada ${kebunFilter}` : ""}. Klik marker untuk melihat detail lokasi.
             </DialogDescription>
           </DialogHeader>
-          <CoordinateMap records={filtered} height={480} testId="coordinate-chart" />
+          <CoordinateMap records={filtered} height={480} testId="coordinate-chart" newWindowMs={newWindowMs} newLabel={`Baru (${NEW_RANGE_OPTIONS.find((o) => o.value === newRange)?.label || "24 jam"})`} />
         </DialogContent>
       </Dialog>
 

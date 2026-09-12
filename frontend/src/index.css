@@ -148,3 +148,10 @@ body {
     }
     @page { margin: 8mm; }
 }
+
+/* ---- Leaflet map: contain internal z-index so map controls/legend
+   never bleed above modals (Pratinjau & Cetak, dialog peta) ---- */
+.leaflet-container {
+    isolation: isolate;
+    z-index: 0;
+}

@@ -10,7 +10,8 @@ function coordFilled(raw) {
 }
 
 // Konvensi: Koord_X = Longitude (bujur), Koord_Y = Latitude (lintang)
-function toPoints(records) {
+function toPoints(records, newWindowMs = 0) {
+  const now = Date.now();
   return (records || [])
     .map((r) => {
       const rawX = r.koord_x === null || r.koord_x === undefined ? "" : String(r.koord_x).trim();
@@ -18,7 +19,12 @@ function toPoints(records) {
       const lat = parseFloat(rawY.replace(",", "."));
       const lng = parseFloat(rawX.replace(",", "."));
       const tagged = coordFilled(rawX) && coordFilled(rawY);
-      return { ...r, lat, lng, tagged };
+      let isNew = false;
+      if (newWindowMs && r.created_at) {
+        const t = new Date(r.created_at).getTime();
+        isNew = !Number.isNaN(t) && now - t <= newWindowMs;
+      }
+      return { ...r, lat, lng, tagged, isNew };
     })
     .filter(
       (p) =>
@@ -48,8 +54,9 @@ function FitBounds({ points }) {
   return null;
 }
 
-export default function CoordinateMap({ records, height = 420, interactive = true, testId }) {
-  const points = useMemo(() => toPoints(records), [records]);
+export default function CoordinateMap({ records, height = 420, interactive = true, testId, newWindowMs = 0, newLabel = "Baru" }) {
+  const points = useMemo(() => toPoints(records, newWindowMs), [records, newWindowMs]);
+  const hasNew = useMemo(() => points.some((p) => p.isNew), [points]);
   const center = points.length ? [points[0].lat, points[0].lng] : [0.5, 110.4];
 
   if (!points.length) {
@@ -94,14 +101,14 @@ export default function CoordinateMap({ records, height = 420, interactive = tru
         </LayersControl>
         <FitBounds points={points} />
         {points.map((p) => {
-          const color = p.tagged ? "#0F291E" : "#B45309";
-          const fill = p.tagged ? "#84CC16" : "#FCD34D";
+          const color = p.isNew ? "#0369A1" : p.tagged ? "#0F291E" : "#B45309";
+          const fill = p.isNew ? "#38BDF8" : p.tagged ? "#84CC16" : "#FCD34D";
           return (
             <CircleMarker
               key={p._id || `${p.lat}-${p.lng}`}
               center={[p.lat, p.lng]}
-              radius={7}
-              pathOptions={{ color, weight: 2, fillColor: fill, fillOpacity: 0.9 }}
+              radius={p.isNew ? 8 : 7}
+              pathOptions={{ color, weight: p.isNew ? 3 : 2, fillColor: fill, fillOpacity: 0.9 }}
             >
               <Popup>
                 <div className="text-xs">
@@ -114,6 +121,7 @@ export default function CoordinateMap({ records, height = 420, interactive = tru
                   <div className={`mt-1 font-semibold ${p.tagged ? "text-emerald-700" : "text-amber-700"}`}>
                     {p.tagged ? "Sudah di-tagging" : "Belum di-tagging"}
                   </div>
+                  {p.isNew && <div className="mt-0.5 font-semibold text-sky-700">✨ {newLabel}</div>}
                   {p.id_actual && (
                     <div className="text-gray-500 mt-0.5 font-mono break-all">ID: {p.id_actual}</div>
                   )}
@@ -132,6 +140,12 @@ export default function CoordinateMap({ records, height = 420, interactive = tru
           <span className="w-3 h-3 rounded-full border-2" style={{ borderColor: "#B45309", background: "#FCD34D" }} />
           <span className="text-gray-700 font-medium">Belum di-tagging</span>
         </div>
+        {hasNew && (
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full border-2" style={{ borderColor: "#0369A1", background: "#38BDF8" }} />
+            <span className="text-gray-700 font-medium">{newLabel}</span>
+          </div>
+        )}
       </div>
     </div>
   );

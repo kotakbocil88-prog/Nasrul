@@ -59,3 +59,10 @@ Kelola data: Kebun (teks), Afdeling (teks), Blok (teks), Code LSU (teks), Koord_
 - DONE (2025-07 v11): Cetak QR berdasarkan kriteria. Tombol utama "Pratinjau & Cetak Label" -> "Cetak Label (N)" kini MENGIKUTI filter aktif dashboard (Kebun, Afdeling, Kategori, Status tagging, rentang Tanggal LSU, pencarian) via openFilteredPreview(): jika semua data tampil pakai jalur GET all, jika terfilter kirim ids terfilter (POST). Dialog pratinjau menampilkan chip ringkasan kriteria aktif (data-testid=preview-criteria) + label sumber (semua/filter/terpilih via previewSource). Cetak label terpilih (checkbox) tetap ada. Frontend-only, lint clean.
 
 - DONE (2025-07 v12): Tanda "Baru". Badge biru "Baru" (ikon Sparkles) di sebelah Id Actual pada tabel untuk record yang ditambahkan manual ATAU di-upload via Excel dalam 24 jam terakhir (helper isNew() berbasis created_at; backend serialize sudah kirim created_at). Baris baru juga diberi latar biru muda (bg-sky-50). NEW_WINDOW_MS=24 jam (mudah diubah). Frontend-only, lint clean.
+
+- DONE (2025-07 v13): 4 fitur + 1 bugfix (semua verified frontend testing 5/5 PASS).
+  * BUGFIX z-index peta: kontrol/legenda Leaflet menembus di atas dialog Pratinjau & Cetak. Fix: `.leaflet-container { isolation: isolate; z-index: 0; }` di index.css -> peta jadi stacking context sendiri, modal (z-50) selalu di atas.
+  * Filter "Baru" (data-testid=filter-new-toggle): toggle tampilkan hanya data baru; menampilkan jumlah (newCount).
+  * Rentang "Baru" (data-testid=new-range-select): 24 jam / 3 hari / 7 hari; isNew(r, windowMs) & newWindowMs reaktif; badge, highlight baris, filter, & peta ikut berubah.
+  * Badge di Peta: titik baru biru (#38BDF8 fill / #0369A1 border, radius+1) + popup "✨ Baru" + item legenda "Baru (...)" (hanya muncul jika ada titik baru).
+  * Cetak per-kriteria diperbaiki: openFilteredPreview pakai anyFilterActive (bukan lagi bandingkan count), chip kriteria (preview-criteria) tampil walau semua record 1 kebun; activeCriteria kini termasuk "Baru".
