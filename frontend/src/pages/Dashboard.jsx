@@ -1154,14 +1154,16 @@ export default function Dashboard() {
 
         {/* Controls */}
         <div className="bg-card rounded-2xl border p-4 sm:p-5 mb-6">
+          {/* Baris 1: filter status + Baru + aksi data */}
           <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-            <div className="flex rounded-lg border overflow-hidden h-10" data-testid="status-filter">
+            {/* Segmented status filter */}
+            <div className="inline-flex items-center rounded-xl bg-muted p-1 h-11 self-start" data-testid="status-filter">
               <button
                 type="button"
                 data-testid="status-filter-all"
                 onClick={() => setStatusFilter("all")}
-                className={`px-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                  statusFilter === "all" ? "bg-[#1B4D3E] text-white" : "bg-white text-[#1B4D3E] hover:bg-muted"
+                className={`px-4 h-9 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
+                  statusFilter === "all" ? "bg-[#1B4D3E] text-white shadow-sm" : "text-[#1B4D3E] hover:bg-white/70"
                 }`}
               >
                 Semua
@@ -1170,8 +1172,8 @@ export default function Dashboard() {
                 type="button"
                 data-testid="status-filter-tagged"
                 onClick={() => setStatusFilter("tagged")}
-                className={`px-3 text-sm font-medium border-l transition-colors whitespace-nowrap ${
-                  statusFilter === "tagged" ? "bg-emerald-600 text-white" : "bg-white text-emerald-700 hover:bg-emerald-50"
+                className={`px-4 h-9 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
+                  statusFilter === "tagged" ? "bg-emerald-600 text-white shadow-sm" : "text-emerald-700 hover:bg-white/70"
                 }`}
               >
                 Sudah
@@ -1180,13 +1182,14 @@ export default function Dashboard() {
                 type="button"
                 data-testid="status-filter-untagged"
                 onClick={() => setStatusFilter("untagged")}
-                className={`px-3 text-sm font-medium border-l transition-colors whitespace-nowrap ${
-                  statusFilter === "untagged" ? "bg-amber-500 text-white" : "bg-white text-amber-700 hover:bg-amber-50"
+                className={`px-4 h-9 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
+                  statusFilter === "untagged" ? "bg-amber-500 text-white shadow-sm" : "text-amber-700 hover:bg-white/70"
                 }`}
               >
                 Belum
               </button>
             </div>
+
             {/* Filter cepat "Baru" + rentang */}
             <div className="flex items-center gap-2" data-testid="new-filter-group">
               <button
@@ -1194,9 +1197,9 @@ export default function Dashboard() {
                 data-testid="filter-new-toggle"
                 onClick={() => setOnlyNew((v) => !v)}
                 title="Tampilkan hanya data yang baru ditambahkan / di-upload"
-                className={`inline-flex items-center gap-1.5 h-10 px-3 rounded-lg border text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`inline-flex items-center gap-1.5 h-11 px-3.5 rounded-xl border text-sm font-medium transition-colors whitespace-nowrap ${
                   onlyNew
-                    ? "bg-sky-600 text-white border-sky-600"
+                    ? "bg-sky-600 text-white border-sky-600 shadow-sm"
                     : "bg-white text-sky-700 border-sky-200 hover:bg-sky-50"
                 }`}
               >
@@ -1210,7 +1213,7 @@ export default function Dashboard() {
                 </span>
               </button>
               <Select value={newRange} onValueChange={setNewRange}>
-                <SelectTrigger className="h-10 w-28" data-testid="new-range-select" title="Rentang waktu dianggap 'Baru'">
+                <SelectTrigger className="h-11 w-28 rounded-xl bg-white" data-testid="new-range-select" title="Rentang waktu dianggap 'Baru'">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1222,77 +1225,95 @@ export default function Dashboard() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {isAdmin && (
+
+            {/* Aksi data (admin) */}
+            {isAdmin && (
+              <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
                 <Button
                   data-testid="add-record-button"
                   onClick={openAdd}
-                  className="bg-[#1B4D3E] hover:bg-[#0F291E] text-white h-10"
+                  className="bg-[#1B4D3E] hover:bg-[#0F291E] text-white h-11 rounded-xl px-5 shadow-sm"
                 >
                   <Plus className="w-4 h-4 mr-1.5" /> Tambah
                 </Button>
-              )}
-              {isAdmin && (
                 <Button
                   data-testid="import-button"
                   onClick={() => setImportOpen(true)}
                   variant="outline"
-                  className="h-10 border-[#1B4D3E]/30 text-[#1B4D3E] hover:bg-[#1B4D3E]/5"
+                  className="h-11 rounded-xl border-[#1B4D3E]/30 text-[#1B4D3E] hover:bg-[#1B4D3E]/5"
                 >
                   <Upload className="w-4 h-4 mr-1.5" /> Impor Excel
                 </Button>
-              )}
+              </div>
+            )}
+          </div>
+
+          {/* Baris 2: Ekspor & Cetak — dikelompokkan agar rapi */}
+          <div className="mt-3 pt-3 border-t">
+            <div className="flex items-center gap-3 mb-2.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+                Ekspor & Cetak
+              </span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 data-testid="export-labels-button"
                 onClick={openFilteredPreview}
                 variant="outline"
-                className="h-10 border-[#84CC16]/50 text-[#4d7c0f] hover:bg-lime-50"
+                className="h-10 rounded-xl bg-white hover:bg-muted"
               >
-                <Tags className="w-4 h-4 mr-1.5" /> Pratinjau & Cetak Label ({filtered.length})
+                <Tags className="w-4 h-4 mr-1.5 text-lime-600" /> Pratinjau & Cetak Label ({filtered.length})
               </Button>
               <Button
                 data-testid="export-table-button"
                 onClick={() => exportPdf("table")}
                 disabled={exporting === "table"}
                 variant="outline"
-                className="h-10 border-[#F59E0B]/50 text-[#b45309] hover:bg-amber-50"
+                className="h-10 rounded-xl bg-white hover:bg-muted"
               >
-                <FileText className="w-4 h-4 mr-1.5" /> PDF Tabel
-              </Button>
-              <Button
-                data-testid="export-untagged-button"
-                onClick={() => exportPdf("untagged")}
-                disabled={exporting === "untagged"}
-                variant="outline"
-                className="h-10 border-amber-400/60 text-amber-700 hover:bg-amber-50"
-              >
-                <AlertCircle className="w-4 h-4 mr-1.5" /> Daftar Belum
-              </Button>
-              <Button
-                data-testid="export-untagged-excel-button"
-                onClick={() => exportPdf("untagged-excel")}
-                disabled={exporting === "untagged-excel"}
-                variant="outline"
-                className="h-10 border-amber-400/60 text-amber-700 hover:bg-amber-50"
-              >
-                <Download className="w-4 h-4 mr-1.5" /> Daftar Belum (Excel)
+                <FileText className="w-4 h-4 mr-1.5 text-orange-600" /> PDF Tabel
               </Button>
               <Button
                 data-testid="export-excel-button"
                 onClick={() => exportPdf("excel")}
                 disabled={exporting === "excel"}
                 variant="outline"
-                className="h-10 border-[#059669]/50 text-[#047857] hover:bg-emerald-50"
+                className="h-10 rounded-xl bg-white hover:bg-muted"
               >
-                <Download className="w-4 h-4 mr-1.5" /> Ekspor Excel
+                <Download className="w-4 h-4 mr-1.5 text-emerald-600" /> Ekspor Excel
               </Button>
+
+              <span className="hidden sm:block h-6 w-px bg-border mx-1" aria-hidden="true" />
+
+              <Button
+                data-testid="export-untagged-button"
+                onClick={() => exportPdf("untagged")}
+                disabled={exporting === "untagged"}
+                variant="outline"
+                className="h-10 rounded-xl bg-white border-amber-200 text-amber-800 hover:bg-amber-50"
+              >
+                <AlertCircle className="w-4 h-4 mr-1.5 text-amber-600" /> Daftar Belum
+              </Button>
+              <Button
+                data-testid="export-untagged-excel-button"
+                onClick={() => exportPdf("untagged-excel")}
+                disabled={exporting === "untagged-excel"}
+                variant="outline"
+                className="h-10 rounded-xl bg-white border-amber-200 text-amber-800 hover:bg-amber-50"
+              >
+                <Download className="w-4 h-4 mr-1.5 text-amber-600" /> Daftar Belum (Excel)
+              </Button>
+
+              <span className="hidden sm:block h-6 w-px bg-border mx-1" aria-hidden="true" />
+
               <Button
                 data-testid="map-button"
                 onClick={() => setMapOpen(true)}
                 variant="outline"
-                className="h-10 border-[#10B981]/50 text-[#0F291E] hover:bg-emerald-50"
+                className="h-10 rounded-xl bg-white hover:bg-muted"
               >
-                <MapIcon className="w-4 h-4 mr-1.5" /> Peta Koordinat
+                <MapIcon className="w-4 h-4 mr-1.5 text-teal-600" /> Peta Koordinat
               </Button>
             </div>
           </div>
