@@ -121,7 +121,7 @@ function StatCard({ icon: Icon, label, value, accent, onClick }) {
           <Icon className="w-5 h-5" style={{ color: accent }} />
         </div>
       </div>
-      <p className="relative font-heading text-[2.1rem] leading-none font-extrabold mt-4 text-[#0B1D15] tracking-tight">
+      <p className="relative font-heading text-[2.1rem] leading-none font-extrabold mt-4 text-[#0B1D15] dark:text-emerald-50 tracking-tight">
         {value}
       </p>
       <div className="relative mt-3 h-1 w-full rounded-full bg-muted overflow-hidden">
@@ -151,11 +151,11 @@ function KebunBreakdownCard({ item }) {
       <div className="stat-glow" />
       <div className="relative flex items-start justify-between mb-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-emerald-50 ring-1 ring-black/5 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 ring-1 ring-black/5 flex items-center justify-center">
             <Leaf className="w-4 h-4 text-[#10B981]" />
           </div>
           <div>
-            <div className="font-heading font-extrabold text-lg text-[#0B1D15] leading-none">{item.kebun}</div>
+            <div className="font-heading font-extrabold text-lg text-[#0B1D15] dark:text-emerald-50 leading-none">{item.kebun}</div>
             <div className="text-[11px] text-muted-foreground mt-1">
               {item.afdelings.length} afdeling · {item.blokCount} blok
             </div>
@@ -171,7 +171,7 @@ function KebunBreakdownCard({ item }) {
       {/* Ringkasan tagging tingkat kebun */}
       <div className="relative mb-4">
         <div className="flex items-center justify-between text-[11px] mb-1">
-          <span className="font-semibold text-emerald-700">{item.tagged.toLocaleString("id-ID")} sudah</span>
+          <span className="font-semibold text-emerald-700 dark:text-emerald-400">{item.tagged.toLocaleString("id-ID")} sudah</span>
           <span className="font-semibold text-amber-600">{item.untagged.toLocaleString("id-ID")} belum</span>
         </div>
         <div className="h-2 w-full rounded-full bg-amber-100 overflow-hidden flex">
@@ -184,14 +184,14 @@ function KebunBreakdownCard({ item }) {
           const apct = a.count ? (a.tagged / a.count) * 100 : 0;
           return (
             <div key={a.afdeling} className="flex items-center gap-2">
-              <span className="w-16 shrink-0 text-xs font-medium text-[#0B1D15] truncate" title={a.afdeling}>
+              <span className="w-16 shrink-0 text-xs font-medium text-[#0B1D15] dark:text-emerald-50 truncate" title={a.afdeling}>
                 Afd {a.afdeling}
               </span>
               <div className="flex-1 h-2 rounded-full bg-amber-100 overflow-hidden flex" title={`${a.tagged} sudah / ${a.untagged} belum`}>
                 <div className="h-full bg-emerald-500" style={{ width: `${apct}%` }} />
               </div>
               <span className="w-16 shrink-0 text-right text-xs font-mono font-semibold">
-                <span className="text-emerald-700">{a.tagged.toLocaleString("id-ID")}</span>
+                <span className="text-emerald-700 dark:text-emerald-400">{a.tagged.toLocaleString("id-ID")}</span>
                 <span className="text-muted-foreground">/{a.count.toLocaleString("id-ID")}</span>
               </span>
             </div>
@@ -375,6 +375,28 @@ export default function Dashboard() {
     setDark(next);
     window.setTimeout(() => root.classList.remove("theme-anim"), 400);
   };
+  // Ikuti perubahan tema perangkat secara real-time (selama user belum memilih manual)
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e) => {
+      let saved = null;
+      try {
+        saved = localStorage.getItem("theme");
+      } catch (err) {
+        // ignore
+      }
+      if (saved) return; // hormati pilihan manual pengguna
+      document.documentElement.classList.toggle("dark", e.matches);
+      setDark(e.matches);
+    };
+    if (mq.addEventListener) mq.addEventListener("change", handler);
+    else mq.addListener(handler);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", handler);
+      else mq.removeListener(handler);
+    };
+  }, []);
   const [recordOpen, setRecordOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -938,11 +960,11 @@ export default function Dashboard() {
         <div className="mb-8" data-testid="tagging-summary-section">
           <div className="bg-card rounded-2xl border p-4 sm:p-5">
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center">
                 <MapPin className="w-4 h-4 text-[#10B981]" />
               </div>
               <div>
-                <h3 className="font-heading font-bold text-sm text-[#0B1D15] leading-none">Status Tagging</h3>
+                <h3 className="font-heading font-bold text-sm text-[#0B1D15] dark:text-emerald-50 leading-none">Status Tagging</h3>
                 <p className="text-[11px] text-muted-foreground mt-1">
                   {taggingStats.total.toLocaleString("id-ID")} lokasi · klik untuk memfilter
                 </p>
@@ -955,15 +977,15 @@ export default function Dashboard() {
                 onClick={() => setStatusFilter(statusFilter === "tagged" ? "all" : "tagged")}
                 className={`text-left rounded-xl border p-4 transition-all hover:shadow-md ${
                   statusFilter === "tagged"
-                    ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-200"
-                    : "border-emerald-100 bg-white hover:bg-emerald-50/50"
+                    ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/15 ring-2 ring-emerald-200 dark:ring-emerald-500/30"
+                    : "border-emerald-100 dark:border-emerald-500/20 bg-white dark:bg-emerald-500/5 hover:bg-emerald-50/50 dark:hover:bg-emerald-500/10"
                 }`}
               >
-                <div className="flex items-center gap-2 text-emerald-700">
+                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
                   <CheckCircle2 className="w-4 h-4" />
                   <span className="text-xs font-semibold uppercase tracking-wide">Sudah di-tagging</span>
                 </div>
-                <p className="font-heading text-3xl font-extrabold text-[#0B1D15] mt-2 leading-none">
+                <p className="font-heading text-3xl font-extrabold text-[#0B1D15] dark:text-emerald-50 mt-2 leading-none">
                   {taggingStats.tagged.toLocaleString("id-ID")}
                 </p>
               </button>
@@ -973,15 +995,15 @@ export default function Dashboard() {
                 onClick={() => setStatusFilter(statusFilter === "untagged" ? "all" : "untagged")}
                 className={`text-left rounded-xl border p-4 transition-all hover:shadow-md ${
                   statusFilter === "untagged"
-                    ? "border-amber-500 bg-amber-50 ring-2 ring-amber-200"
-                    : "border-amber-100 bg-white hover:bg-amber-50/50"
+                    ? "border-amber-500 bg-amber-50 dark:bg-amber-500/15 ring-2 ring-amber-200 dark:ring-amber-500/30"
+                    : "border-amber-100 dark:border-amber-500/20 bg-white dark:bg-amber-500/5 hover:bg-amber-50/50 dark:hover:bg-amber-500/10"
                 }`}
               >
-                <div className="flex items-center gap-2 text-amber-700">
+                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
                   <AlertCircle className="w-4 h-4" />
                   <span className="text-xs font-semibold uppercase tracking-wide">Belum di-tagging</span>
                 </div>
-                <p className="font-heading text-3xl font-extrabold text-[#0B1D15] mt-2 leading-none">
+                <p className="font-heading text-3xl font-extrabold text-[#0B1D15] dark:text-emerald-50 mt-2 leading-none">
                   {taggingStats.untagged.toLocaleString("id-ID")}
                 </p>
               </button>
@@ -1011,7 +1033,7 @@ export default function Dashboard() {
                 <Layers className="w-4 h-4 text-[#1B4D3E] dark:text-emerald-300" />
               </div>
               <div>
-                <h3 className="font-heading font-bold text-sm text-[#0B1D15] leading-none">
+                <h3 className="font-heading font-bold text-sm text-[#0B1D15] dark:text-emerald-50 leading-none">
                   Ringkasan Tagging per Kebun &amp; Afdeling
                 </h3>
                 <p className="text-[11px] text-muted-foreground mt-1">
@@ -1041,7 +1063,7 @@ export default function Dashboard() {
                 <TrendingUp className="w-4 h-4 text-[#10B981]" />
               </div>
               <div>
-                <h3 className="font-heading font-bold text-sm text-[#0B1D15] leading-none">Progres Harian Tagging</h3>
+                <h3 className="font-heading font-bold text-sm text-[#0B1D15] dark:text-emerald-50 leading-none">Progres Harian Tagging</h3>
                 <p className="text-[11px] text-muted-foreground mt-1">
                   Perkembangan jumlah lokasi ter-tagging dari waktu ke waktu
                 </p>
@@ -1049,7 +1071,7 @@ export default function Dashboard() {
             </div>
             {progress && (
               <div className="text-right hidden sm:block">
-                <div className="font-heading text-xl font-extrabold text-emerald-700 leading-none">
+                <div className="font-heading text-xl font-extrabold text-emerald-700 dark:text-emerald-400 leading-none">
                   {progress.tagged_total.toLocaleString("id-ID")}
                 </div>
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">total ter-tagging</div>
@@ -1097,7 +1119,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="w-5 h-5 text-[#10B981]" />
             <div>
-              <h3 className="font-heading font-bold text-base text-[#0B1D15] leading-none">
+              <h3 className="font-heading font-bold text-base text-[#0B1D15] dark:text-emerald-50 leading-none">
                 Ringkasan Agronomi
               </h3>
               <p className="text-xs text-muted-foreground mt-1">
@@ -1134,11 +1156,11 @@ export default function Dashboard() {
                   <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <span className="block text-[10px] text-muted-foreground uppercase">Min</span>
-                      <span className="font-semibold text-[#0B1D15]">{fmtStat(s.min, m.digits)}</span>
+                      <span className="font-semibold text-[#0B1D15] dark:text-emerald-50">{fmtStat(s.min, m.digits)}</span>
                     </div>
                     <div>
                       <span className="block text-[10px] text-muted-foreground uppercase">Maks</span>
-                      <span className="font-semibold text-[#0B1D15]">{fmtStat(s.max, m.digits)}</span>
+                      <span className="font-semibold text-[#0B1D15] dark:text-emerald-50">{fmtStat(s.max, m.digits)}</span>
                     </div>
                   </div>
                   <div className="mt-2 text-[10px] text-muted-foreground">
@@ -1206,7 +1228,7 @@ export default function Dashboard() {
                 <MapIcon className="w-4 h-4 text-[#10B981]" />
               </div>
               <div>
-                <h3 className="font-heading font-bold text-sm text-[#0B1D15] leading-none">Sebaran Koordinat</h3>
+                <h3 className="font-heading font-bold text-sm text-[#0B1D15] dark:text-emerald-50 leading-none">Sebaran Koordinat</h3>
                 <p className="text-[11px] text-muted-foreground mt-1">
                   {filtered.length} titik · peta OpenStreetMap · klik marker untuk detail
                 </p>

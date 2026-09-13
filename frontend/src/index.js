@@ -4,11 +4,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@/index.css";
 import App from "@/App";
 
-// Apply saved theme before first paint to avoid flash
+// Apply theme before first paint to avoid flash:
+// - honour a saved manual choice, otherwise follow the device theme
 try {
-  if (localStorage.getItem("theme") === "dark") {
-    document.documentElement.classList.add("dark");
-  }
+  const saved = localStorage.getItem("theme");
+  const prefersDark =
+    typeof window !== "undefined" &&
+    window.matchMedia &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const useDark = saved ? saved === "dark" : prefersDark;
+  document.documentElement.classList.toggle("dark", useDark);
 } catch (e) {
   // ignore storage errors
 }
