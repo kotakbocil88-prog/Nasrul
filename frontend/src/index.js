@@ -4,6 +4,15 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@/index.css";
 import App from "@/App";
 
+// Apply saved theme before first paint to avoid flash
+try {
+  if (localStorage.getItem("theme") === "dark") {
+    document.documentElement.classList.add("dark");
+  }
+} catch (e) {
+  // ignore storage errors
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

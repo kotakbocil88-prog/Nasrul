@@ -25,6 +25,10 @@ import {
   TrendingUp,
   SlidersHorizontal,
   Sparkles,
+  Sun,
+  Moon,
+  ChevronDown,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +47,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -150,7 +162,7 @@ function KebunBreakdownCard({ item }) {
           </div>
         </div>
         <div className="text-right">
-          <div className="font-heading text-2xl font-extrabold text-[#1B4D3E] leading-none">
+          <div className="font-heading text-2xl font-extrabold text-[#1B4D3E] dark:text-emerald-300 leading-none">
             {item.total.toLocaleString("id-ID")}
           </div>
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">data</div>
@@ -346,6 +358,23 @@ export default function Dashboard() {
   const [tanggalTo, setTanggalTo] = useState("");
   const [visibleCols, setVisibleCols] = useState(() => new Set(DATA_COLUMNS.map((c) => c[0])));
   const [colMenuOpen, setColMenuOpen] = useState(false);
+  // Tema gelap/terang
+  const [dark, setDark] = useState(() =>
+    typeof document !== "undefined" && document.documentElement.classList.contains("dark"),
+  );
+  const toggleTheme = () => {
+    const root = document.documentElement;
+    root.classList.add("theme-anim");
+    const next = !root.classList.contains("dark");
+    root.classList.toggle("dark", next);
+    try {
+      localStorage.setItem("theme", next ? "dark" : "light");
+    } catch (e) {
+      // ignore
+    }
+    setDark(next);
+    window.setTimeout(() => root.classList.remove("theme-anim"), 400);
+  };
   const [recordOpen, setRecordOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -698,6 +727,39 @@ export default function Dashboard() {
     return parts;
   }, [search, kebunFilter, afdelingFilter, kategoriFilter, statusFilter, onlyNew, tanggalFrom, tanggalTo]);
 
+  // Chip filter aktif yang bisa dihapus satu per satu
+  const filterChips = useMemo(() => {
+    const chips = [];
+    if (search.trim())
+      chips.push({ key: "search", label: `Cari: "${search.trim()}"`, clear: () => setSearch("") });
+    if (kebunFilter !== "all")
+      chips.push({ key: "kebun", label: `Kebun: ${kebunFilter}`, clear: () => setKebunFilter("all") });
+    if (afdelingFilter !== "all")
+      chips.push({ key: "afdeling", label: `Afdeling: ${afdelingFilter}`, clear: () => setAfdelingFilter("all") });
+    if (kategoriFilter !== "all")
+      chips.push({ key: "kategori", label: `Kategori: ${kategoriFilter}`, clear: () => setKategoriFilter("all") });
+    if (statusFilter === "tagged")
+      chips.push({ key: "status", label: "Sudah di-tagging", clear: () => setStatusFilter("all") });
+    if (statusFilter === "untagged")
+      chips.push({ key: "status", label: "Belum di-tagging", clear: () => setStatusFilter("all") });
+    if (onlyNew) chips.push({ key: "new", label: "Baru", clear: () => setOnlyNew(false) });
+    if (tanggalFrom)
+      chips.push({ key: "from", label: `Dari: ${tanggalFrom}`, clear: () => setTanggalFrom("") });
+    if (tanggalTo) chips.push({ key: "to", label: `Sampai: ${tanggalTo}`, clear: () => setTanggalTo("") });
+    return chips;
+  }, [search, kebunFilter, afdelingFilter, kategoriFilter, statusFilter, onlyNew, tanggalFrom, tanggalTo]);
+
+  const resetAllFilters = () => {
+    setSearch("");
+    setKebunFilter("all");
+    setAfdelingFilter("all");
+    setKategoriFilter("all");
+    setStatusFilter("all");
+    setOnlyNew(false);
+    setTanggalFrom("");
+    setTanggalTo("");
+  };
+
   const previewDocs = useMemo(() => {
     if (previewIds) return records.filter((r) => previewIds.includes(r._id));
     return records;
@@ -747,6 +809,17 @@ export default function Dashboard() {
                 <div className="text-[10px] text-white/50">{user?.email}</div>
               </div>
             </div>
+            <Button
+              data-testid="theme-toggle-button"
+              onClick={toggleTheme}
+              variant="ghost"
+              size="icon"
+              title={dark ? "Mode terang" : "Mode gelap"}
+              aria-label="Ganti tema"
+              className="text-white hover:bg-white/10 hover:text-white rounded-full w-9 h-9"
+            >
+              {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </Button>
             <Button
               data-testid="logout-button"
               onClick={logout}
@@ -935,7 +1008,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
-                <Layers className="w-4 h-4 text-[#1B4D3E]" />
+                <Layers className="w-4 h-4 text-[#1B4D3E] dark:text-emerald-300" />
               </div>
               <div>
                 <h3 className="font-heading font-bold text-sm text-[#0B1D15] leading-none">
@@ -1096,7 +1169,7 @@ export default function Dashboard() {
                     {agroByKebun.map((kb) => (
                       <Fragment key={kb.kebun}>
                         <tr className="border-t bg-lime-50/50 font-semibold" data-testid={`agro-kebun-row-${kb.kebun}`}>
-                          <td className="px-4 py-2 text-[#0F291E]">{kb.kebun}</td>
+                          <td className="px-4 py-2 text-[#0F291E] dark:text-emerald-200">{kb.kebun}</td>
                           <td className="px-4 py-2 text-center">{kb.count}</td>
                           {AGRO_METRICS.map((m) => (
                             <td key={m.key} className="px-4 py-2 text-right font-mono">
@@ -1144,7 +1217,7 @@ export default function Dashboard() {
               onClick={() => setMapOpen(true)}
               variant="ghost"
               size="sm"
-              className="text-[#0F291E] hover:bg-emerald-50"
+              className="text-[#0F291E] dark:text-emerald-200 hover:bg-emerald-50 dark:hover:bg-emerald-500/10"
             >
               Perbesar
             </Button>
@@ -1153,7 +1226,7 @@ export default function Dashboard() {
         </div>
 
         {/* Controls */}
-        <div className="bg-card rounded-2xl border p-4 sm:p-5 mb-6">
+        <div className="bg-card rounded-2xl border p-4 sm:p-5 mb-6 lg:sticky lg:top-16 z-20 shadow-sm" data-testid="controls-card">
           {/* Baris 1: filter status + Baru + aksi data */}
           <div className="flex flex-col lg:flex-row lg:items-center gap-3">
             {/* Segmented status filter */}
@@ -1163,7 +1236,7 @@ export default function Dashboard() {
                 data-testid="status-filter-all"
                 onClick={() => setStatusFilter("all")}
                 className={`px-4 h-9 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
-                  statusFilter === "all" ? "bg-[#1B4D3E] text-white shadow-sm" : "text-[#1B4D3E] hover:bg-white/70"
+                  statusFilter === "all" ? "bg-[#1B4D3E] text-white shadow-sm" : "text-[#1B4D3E] dark:text-emerald-300 hover:bg-white/70 dark:hover:bg-white/10"
                 }`}
               >
                 Semua
@@ -1173,7 +1246,7 @@ export default function Dashboard() {
                 data-testid="status-filter-tagged"
                 onClick={() => setStatusFilter("tagged")}
                 className={`px-4 h-9 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
-                  statusFilter === "tagged" ? "bg-emerald-600 text-white shadow-sm" : "text-emerald-700 hover:bg-white/70"
+                  statusFilter === "tagged" ? "bg-emerald-600 text-white shadow-sm" : "text-emerald-700 dark:text-emerald-300 hover:bg-white/70 dark:hover:bg-white/10"
                 }`}
               >
                 Sudah
@@ -1183,7 +1256,7 @@ export default function Dashboard() {
                 data-testid="status-filter-untagged"
                 onClick={() => setStatusFilter("untagged")}
                 className={`px-4 h-9 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
-                  statusFilter === "untagged" ? "bg-amber-500 text-white shadow-sm" : "text-amber-700 hover:bg-white/70"
+                  statusFilter === "untagged" ? "bg-amber-500 text-white shadow-sm" : "text-amber-700 dark:text-amber-300 hover:bg-white/70 dark:hover:bg-white/10"
                 }`}
               >
                 Belum
@@ -1200,7 +1273,7 @@ export default function Dashboard() {
                 className={`inline-flex items-center gap-1.5 h-11 px-3.5 rounded-xl border text-sm font-medium transition-colors whitespace-nowrap ${
                   onlyNew
                     ? "bg-sky-600 text-white border-sky-600 shadow-sm"
-                    : "bg-white text-sky-700 border-sky-200 hover:bg-sky-50"
+                    : "bg-white dark:bg-card text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-500/30 hover:bg-sky-50 dark:hover:bg-sky-500/10"
                 }`}
               >
                 <Sparkles className="w-4 h-4" /> Baru
@@ -1213,7 +1286,7 @@ export default function Dashboard() {
                 </span>
               </button>
               <Select value={newRange} onValueChange={setNewRange}>
-                <SelectTrigger className="h-11 w-28 rounded-xl bg-white" data-testid="new-range-select" title="Rentang waktu dianggap 'Baru'">
+                <SelectTrigger className="h-11 w-28 rounded-xl bg-white dark:bg-card" data-testid="new-range-select" title="Rentang waktu dianggap 'Baru'">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1240,7 +1313,7 @@ export default function Dashboard() {
                   data-testid="import-button"
                   onClick={() => setImportOpen(true)}
                   variant="outline"
-                  className="h-11 rounded-xl border-[#1B4D3E]/30 text-[#1B4D3E] hover:bg-[#1B4D3E]/5"
+                  className="h-11 rounded-xl border-[#1B4D3E]/30 dark:border-emerald-400/30 text-[#1B4D3E] dark:text-emerald-300 hover:bg-[#1B4D3E]/5 dark:hover:bg-emerald-400/10"
                 >
                   <Upload className="w-4 h-4 mr-1.5" /> Impor Excel
                 </Button>
@@ -1257,53 +1330,63 @@ export default function Dashboard() {
               <div className="h-px flex-1 bg-border" />
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {/* Aksi utama: pratinjau & cetak label */}
               <Button
                 data-testid="export-labels-button"
                 onClick={openFilteredPreview}
-                variant="outline"
-                className="h-10 rounded-xl bg-white hover:bg-muted"
+                className="h-10 rounded-xl bg-[#4d7c0f] hover:bg-[#3f6212] text-white shadow-sm"
               >
-                <Tags className="w-4 h-4 mr-1.5 text-lime-600" /> Pratinjau & Cetak Label ({filtered.length})
-              </Button>
-              <Button
-                data-testid="export-table-button"
-                onClick={() => exportPdf("table")}
-                disabled={exporting === "table"}
-                variant="outline"
-                className="h-10 rounded-xl bg-white hover:bg-muted"
-              >
-                <FileText className="w-4 h-4 mr-1.5 text-orange-600" /> PDF Tabel
-              </Button>
-              <Button
-                data-testid="export-excel-button"
-                onClick={() => exportPdf("excel")}
-                disabled={exporting === "excel"}
-                variant="outline"
-                className="h-10 rounded-xl bg-white hover:bg-muted"
-              >
-                <Download className="w-4 h-4 mr-1.5 text-emerald-600" /> Ekspor Excel
+                <Tags className="w-4 h-4 mr-1.5" /> Pratinjau & Cetak Label ({filtered.length})
               </Button>
 
-              <span className="hidden sm:block h-6 w-px bg-border mx-1" aria-hidden="true" />
-
-              <Button
-                data-testid="export-untagged-button"
-                onClick={() => exportPdf("untagged")}
-                disabled={exporting === "untagged"}
-                variant="outline"
-                className="h-10 rounded-xl bg-white border-amber-200 text-amber-800 hover:bg-amber-50"
-              >
-                <AlertCircle className="w-4 h-4 mr-1.5 text-amber-600" /> Daftar Belum
-              </Button>
-              <Button
-                data-testid="export-untagged-excel-button"
-                onClick={() => exportPdf("untagged-excel")}
-                disabled={exporting === "untagged-excel"}
-                variant="outline"
-                className="h-10 rounded-xl bg-white border-amber-200 text-amber-800 hover:bg-amber-50"
-              >
-                <Download className="w-4 h-4 mr-1.5 text-amber-600" /> Daftar Belum (Excel)
-              </Button>
+              {/* Dropdown Ekspor — semua opsi ekspor digabung agar toolbar bersih */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    data-testid="export-menu-button"
+                    variant="outline"
+                    className="h-10 rounded-xl bg-card hover:bg-muted"
+                  >
+                    <Download className="w-4 h-4 mr-1.5 text-emerald-600 dark:text-emerald-400" /> Ekspor
+                    <ChevronDown className="w-4 h-4 ml-1.5 opacity-60" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-60">
+                  <DropdownMenuLabel>Ekspor Data</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    data-testid="export-table-button"
+                    disabled={exporting === "table"}
+                    onClick={() => exportPdf("table")}
+                  >
+                    <FileText className="w-4 h-4 mr-2 text-orange-600" /> PDF Tabel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    data-testid="export-excel-button"
+                    disabled={exporting === "excel"}
+                    onClick={() => exportPdf("excel")}
+                  >
+                    <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-600" /> Ekspor Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-amber-700 dark:text-amber-400">
+                    Belum di-tagging
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem
+                    data-testid="export-untagged-button"
+                    disabled={exporting === "untagged"}
+                    onClick={() => exportPdf("untagged")}
+                  >
+                    <AlertCircle className="w-4 h-4 mr-2 text-amber-600" /> Daftar Belum (PDF)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    data-testid="export-untagged-excel-button"
+                    disabled={exporting === "untagged-excel"}
+                    onClick={() => exportPdf("untagged-excel")}
+                  >
+                    <FileSpreadsheet className="w-4 h-4 mr-2 text-amber-600" /> Daftar Belum (Excel)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               <span className="hidden sm:block h-6 w-px bg-border mx-1" aria-hidden="true" />
 
@@ -1311,9 +1394,9 @@ export default function Dashboard() {
                 data-testid="map-button"
                 onClick={() => setMapOpen(true)}
                 variant="outline"
-                className="h-10 rounded-xl bg-white hover:bg-muted"
+                className="h-10 rounded-xl bg-card hover:bg-muted"
               >
-                <MapIcon className="w-4 h-4 mr-1.5 text-teal-600" /> Peta Koordinat
+                <MapIcon className="w-4 h-4 mr-1.5 text-teal-600 dark:text-teal-400" /> Peta Koordinat
               </Button>
             </div>
           </div>
@@ -1362,7 +1445,7 @@ export default function Dashboard() {
                 variant="outline"
                 data-testid="column-toggle-button"
                 onClick={() => setColMenuOpen((o) => !o)}
-                className="h-9 border-[#1B4D3E]/30 text-[#1B4D3E] hover:bg-[#1B4D3E]/5"
+                className="h-9 border-[#1B4D3E]/30 dark:border-emerald-400/30 text-[#1B4D3E] dark:text-emerald-300 hover:bg-[#1B4D3E]/5 dark:hover:bg-emerald-400/10"
               >
                 <SlidersHorizontal className="w-4 h-4 mr-1.5" /> Atur Kolom ({visibleCols.size}/{DATA_COLUMNS.length})
               </Button>
@@ -1374,13 +1457,13 @@ export default function Dashboard() {
                     className="absolute right-0 mt-2 z-50 w-72 max-h-96 overflow-y-auto rounded-xl border bg-card shadow-xl p-3"
                   >
                     <div className="flex items-center justify-between mb-2 pb-2 border-b">
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#1B4D3E]">Tampilkan Kolom</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#1B4D3E] dark:text-emerald-300">Tampilkan Kolom</span>
                       <div className="flex gap-2">
                         <button
                           type="button"
                           data-testid="column-show-all"
                           onClick={() => setVisibleCols(new Set(DATA_COLUMNS.map((c) => c[0])))}
-                          className="text-[11px] text-[#1B4D3E] hover:underline"
+                          className="text-[11px] text-[#1B4D3E] dark:text-emerald-300 hover:underline"
                         >
                           Semua
                         </button>
@@ -1421,6 +1504,39 @@ export default function Dashboard() {
               )}
             </div>
           </div>
+
+          {/* Chip filter aktif — bisa dihapus satu per satu */}
+          {filterChips.length > 0 && (
+            <div
+              className="mt-3 pt-3 border-t flex flex-wrap items-center gap-2"
+              data-testid="active-filter-chips"
+            >
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground mr-1">
+                <SlidersHorizontal className="w-3.5 h-3.5" /> Filter aktif
+              </span>
+              {filterChips.map((chip) => (
+                <button
+                  key={chip.key}
+                  type="button"
+                  onClick={chip.clear}
+                  data-testid={`filter-chip-${chip.key}`}
+                  title="Klik untuk menghapus filter ini"
+                  className="group inline-flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-full text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-200 dark:border-emerald-500/30 dark:hover:bg-emerald-500/20 transition-colors"
+                >
+                  {chip.label}
+                  <X className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100" />
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={resetAllFilters}
+                data-testid="clear-all-filters"
+                className="inline-flex items-center gap-1 h-7 px-3 rounded-full text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                Hapus semua
+              </button>
+            </div>
+          )}
         </div>
         {selected.size > 0 && (
           <div
@@ -1552,7 +1668,7 @@ export default function Dashboard() {
                           />
                         </div>
                       </td>
-                      <td className="px-4 py-2 font-mono font-semibold text-[#1B4D3E] whitespace-nowrap">
+                      <td className="px-4 py-2 font-mono font-semibold text-[#1B4D3E] dark:text-emerald-300 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <span>{r.id_actual}</span>
                           {isNew(r, newWindowMs) && (
@@ -1600,7 +1716,7 @@ export default function Dashboard() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="h-8 w-8 text-[#1B4D3E] hover:bg-[#1B4D3E]/10"
+                            className="h-8 w-8 text-[#1B4D3E] dark:text-emerald-300 hover:bg-[#1B4D3E]/10 dark:hover:bg-emerald-400/10"
                             data-testid={`download-qr-${r._id}`}
                             onClick={() => downloadSingleQR(r)}
                             title="Unduh QR"

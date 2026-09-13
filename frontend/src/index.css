@@ -33,6 +33,28 @@ body {
         --ring: 160 84% 39%;
         --radius: 0.75rem;
     }
+
+    .dark {
+        --background: 160 30% 6%;
+        --foreground: 150 22% 92%;
+        --card: 158 24% 10%;
+        --card-foreground: 150 22% 92%;
+        --popover: 158 26% 9%;
+        --popover-foreground: 150 22% 92%;
+        --primary: 130 52% 56%;
+        --primary-foreground: 150 45% 8%;
+        --secondary: 156 18% 16%;
+        --secondary-foreground: 150 22% 92%;
+        --muted: 156 16% 16%;
+        --muted-foreground: 150 12% 64%;
+        --accent: 160 68% 42%;
+        --accent-foreground: 0 0% 100%;
+        --destructive: 0 62% 48%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 156 14% 20%;
+        --input: 156 14% 22%;
+        --ring: 160 68% 45%;
+    }
 }
 
 @layer base {
@@ -154,4 +176,20 @@ body {
 .leaflet-container {
     isolation: isolate;
     z-index: 0;
+}
+
+/* ---- Dark mode elegant surfaces ---- */
+.dark .stat-elegant {
+    background: linear-gradient(180deg, hsl(158 24% 12%) 0%, hsl(158 26% 9%) 100%);
+}
+.dark .glass-nav {
+    background: rgba(6, 18, 13, 0.78);
+}
+.dark ::selection {
+    background: #84CC16;
+    color: #0F291E;
+}
+/* Smooth theme transition */
+html.theme-anim, html.theme-anim * {
+    transition: background-color .35s ease, border-color .35s ease, color .25s ease !important;
 }
