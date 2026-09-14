@@ -596,17 +596,19 @@ async def import_preview(file: UploadFile = File(...), user: dict = Depends(requ
 
 @api_router.post("/records/import/confirm")
 async def import_confirm(body: ImportConfirm, user: dict = Depends(require_admin)):
-    inserted = 0
+    now = datetime.now(timezone.utc).isoformat()
+    docs = []
     for r in body.rows:
         doc = r.model_dump()
         round_coords(doc)
         apply_derived(doc)
-        doc["created_at"] = datetime.now(timezone.utc).isoformat()
+        doc["created_at"] = now
         if _is_tagged(doc):
-            doc["tagged_at"] = doc["created_at"]
-        await db.records.insert_one(doc)
-        inserted += 1
-    return {"inserted": inserted}
+            doc["tagged_at"] = now
+        docs.append(doc)
+    if docs:
+        await db.records.insert_many(docs)
+    return {"inserted": len(docs)}
 
 
 # ---------------------------------------------------------------- PDF

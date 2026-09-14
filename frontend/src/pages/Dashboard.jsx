@@ -412,6 +412,7 @@ export default function Dashboard() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewIds, setPreviewIds] = useState(null); // null = semua data, array = terpilih
   const [previewSource, setPreviewSource] = useState("all"); // all | filter | selected
+  const [exportScope, setExportScope] = useState("all"); // all | filter
 
   const load = async () => {
     setLoading(true);
@@ -510,6 +511,21 @@ export default function Dashboard() {
     if (onlyNew) out = out.filter((r) => isNew(r, newWindowMs));
     return out;
   }, [baseFiltered, statusFilter, onlyNew, newWindowMs]);
+
+  // Ekspor Terpilih: deteksi filter aktif + kumpulan id hasil filter/pencarian
+  const hasActiveFilter = useMemo(
+    () =>
+      search.trim() !== "" ||
+      kebunFilter !== "all" ||
+      afdelingFilter !== "all" ||
+      kategoriFilter !== "all" ||
+      statusFilter !== "all" ||
+      onlyNew ||
+      tanggalFrom !== "" ||
+      tanggalTo !== "",
+    [search, kebunFilter, afdelingFilter, kategoriFilter, statusFilter, onlyNew, tanggalFrom, tanggalTo]
+  );
+  const filteredIds = useMemo(() => filtered.map((r) => r._id), [filtered]);
 
   const newCount = useMemo(
     () => baseFiltered.reduce((n, r) => n + (isNew(r, newWindowMs) ? 1 : 0), 0),
@@ -1373,19 +1389,44 @@ export default function Dashboard() {
                     <ChevronDown className="w-4 h-4 ml-1.5 opacity-60" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-60">
+                <DropdownMenuContent align="start" className="w-64">
                   <DropdownMenuLabel>Ekspor Data</DropdownMenuLabel>
+                  <div className="px-2 pb-1.5">
+                    <div className="flex rounded-lg bg-muted p-0.5 text-xs font-medium">
+                      <button
+                        type="button"
+                        data-testid="export-scope-all"
+                        onClick={() => setExportScope("all")}
+                        className={`flex-1 rounded-md px-2 py-1 transition ${exportScope === "all" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"}`}
+                      >
+                        Semua ({records.length})
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="export-scope-filter"
+                        onClick={() => setExportScope("filter")}
+                        className={`flex-1 rounded-md px-2 py-1 transition ${exportScope === "filter" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"}`}
+                      >
+                        Hasil filter ({filtered.length})
+                      </button>
+                    </div>
+                    {exportScope === "filter" && !hasActiveFilter && (
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        Tidak ada filter aktif — sama dengan semua data.
+                      </p>
+                    )}
+                  </div>
                   <DropdownMenuItem
                     data-testid="export-table-button"
-                    disabled={exporting === "table"}
-                    onClick={() => exportPdf("table")}
+                    disabled={exporting === "table" || exporting === "sel-table"}
+                    onClick={() => exportPdf("table", exportScope === "filter" ? filteredIds : null)}
                   >
                     <FileText className="w-4 h-4 mr-2 text-orange-600" /> PDF Tabel
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     data-testid="export-excel-button"
-                    disabled={exporting === "excel"}
-                    onClick={() => exportPdf("excel")}
+                    disabled={exporting === "excel" || exporting === "sel-excel"}
+                    onClick={() => exportPdf("excel", exportScope === "filter" ? filteredIds : null)}
                   >
                     <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-600" /> Ekspor Excel
                   </DropdownMenuItem>

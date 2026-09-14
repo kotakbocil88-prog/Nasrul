@@ -43,11 +43,13 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [rows, setRows] = useState(null);
+  const [importProgress, setImportProgress] = useState(null); // {done, total}
   const inputRef = useRef();
 
   const reset = () => {
     setFile(null);
     setRows(null);
+    setImportProgress(null);
   };
 
   const pick = (f) => {
@@ -83,9 +85,18 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
   const doConfirm = async () => {
     if (!rows?.length) return;
     setUploading(true);
+    const CHUNK = 1000;
+    const total = rows.length;
+    let inserted = 0;
+    setImportProgress({ done: 0, total });
     try {
-      const { data } = await api.post("/records/import/confirm", { rows });
-      toast.success(`${data.inserted} data berhasil diimpor`);
+      for (let i = 0; i < total; i += CHUNK) {
+        const batch = rows.slice(i, i + CHUNK);
+        const { data } = await api.post("/records/import/confirm", { rows: batch });
+        inserted += data.inserted ?? batch.length;
+        setImportProgress({ done: Math.min(i + CHUNK, total), total });
+      }
+      toast.success(`${inserted} data berhasil diimpor`);
       reset();
       onImported();
       onOpenChange(false);
@@ -93,6 +104,7 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail));
     } finally {
       setUploading(false);
+      setImportProgress(null);
     }
   };
 
@@ -214,8 +226,26 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
           </div>
         )}
 
+        {importProgress && (
+          <div className="mt-1" data-testid="import-progress">
+            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground mb-1">
+              <span>Mengimpor data…</span>
+              <span data-testid="import-progress-text">
+                {importProgress.done.toLocaleString("id-ID")} / {importProgress.total.toLocaleString("id-ID")}
+                {" "}({Math.round((importProgress.done / Math.max(importProgress.total, 1)) * 100)}%)
+              </span>
+            </div>
+            <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full bg-[#4d7c0f] transition-all duration-300"
+                style={{ width: `${Math.round((importProgress.done / Math.max(importProgress.total, 1)) * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         <DialogFooter>
-          <Button variant="outline" onClick={() => handleOpenChange(false)} data-testid="import-cancel-button">
+          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={uploading} data-testid="import-cancel-button">
             Batal
           </Button>
           {rows === null ? (
@@ -234,7 +264,11 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
               data-testid="import-upload-button"
               className="bg-[#1B4D3E] hover:bg-[#0F291E] text-white"
             >
-              {uploading ? "Mengimpor..." : `Impor ${rows.length} Data`}
+              {uploading
+                ? importProgress
+                  ? `Mengimpor… ${Math.round((importProgress.done / Math.max(importProgress.total, 1)) * 100)}%`
+                  : "Mengimpor..."
+                : `Impor ${rows.length} Data`}
             </Button>
           )}
         </DialogFooter>
