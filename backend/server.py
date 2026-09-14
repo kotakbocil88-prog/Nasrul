@@ -393,13 +393,13 @@ def serialize(doc: dict) -> dict:
 
 @api_router.get("/records")
 async def list_records(user: dict = Depends(get_current_user)):
-    docs = await db.records.find().sort("created_at", 1).to_list(20000)
+    docs = await db.records.find().sort("created_at", 1).to_list(200000)
     return [serialize(d) for d in docs]
 
 
 @api_router.get("/records/stats")
 async def stats(user: dict = Depends(get_current_user)):
-    docs = await db.records.find().to_list(20000)
+    docs = await db.records.find().to_list(200000)
     kebun = set(); afd = set(); blok = set(); lsu = set()
     for d in docs:
         kebun.add(d.get("kebun", "")); afd.add((d.get("kebun",""), d.get("afdeling","")))
@@ -601,9 +601,9 @@ def _draw_qr(c, payload, x, y, size):
 async def _fetch_docs(ids: Optional[List[str]]):
     if ids:
         oids = [ObjectId(i) for i in ids]
-        docs = await db.records.find({"_id": {"$in": oids}}).sort("created_at", 1).to_list(20000)
+        docs = await db.records.find({"_id": {"$in": oids}}).sort("created_at", 1).to_list(200000)
     else:
-        docs = await db.records.find().sort("created_at", 1).to_list(20000)
+        docs = await db.records.find().sort("created_at", 1).to_list(200000)
     for d in docs:
         d["id_actual"] = build_id_actual(d)
         apply_derived(d)
@@ -877,7 +877,7 @@ def build_untagged_excel(docs) -> io.BytesIO:
 @api_router.get("/records/tagging-progress")
 async def tagging_progress(user: dict = Depends(get_current_user)):
     """Perkembangan jumlah lokasi ter-tagging dari waktu ke waktu (harian, kumulatif)."""
-    docs = await db.records.find().to_list(20000)
+    docs = await db.records.find().to_list(200000)
     per_day = {}
     tagged_total = 0
     for d in docs:
