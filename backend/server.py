@@ -568,6 +568,7 @@ def parse_excel(content: bytes) -> List[dict]:
     field_idx = {f: (kind, find_idx(al)) for f, (kind, al) in FIELD_ALIASES.items()}
 
     parsed = []
+    skipped = 0
     for row in rows[1:]:
         if row is None or all(c is None or _cell(c) == "" for c in row):
             continue
@@ -582,16 +583,17 @@ def parse_excel(content: bytes) -> List[dict]:
         for f, (kind, i) in field_idx.items():
             rec[f] = gn(i) if kind == "num" else g(i)
         if not (rec.get("kebun") or rec.get("blok") or rec.get("code_lsu")):
+            skipped += 1
             continue
         parsed.append(rec)
-    return parsed
+    return parsed, skipped
 
 
 @api_router.post("/records/import/preview")
 async def import_preview(file: UploadFile = File(...), user: dict = Depends(require_admin)):
     content = await file.read()
-    rows = parse_excel(content)
-    return {"rows": rows, "count": len(rows)}
+    rows, skipped = parse_excel(content)
+    return {"rows": rows, "count": len(rows), "skipped": skipped}
 
 
 @api_router.post("/records/import/confirm")

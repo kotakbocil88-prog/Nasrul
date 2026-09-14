@@ -479,6 +479,34 @@ export default function Dashboard() {
     return { tagged, untagged: baseFiltered.length - tagged, total: baseFiltered.length };
   }, [baseFiltered]);
 
+  // Ringkasan status tagging per BLOK (identitas blok = Kebun + Afdeling + Blok).
+  // Blok "sudah tertagging" = SEMUA titik samplenya sudah punya koordinat.
+  // Blok "belum" = masih ada minimal 1 titik tanpa koordinat (sebagian atau kosong).
+  const blockTaggingStats = useMemo(() => {
+    const map = new Map(); // key -> { total, tagged }
+    for (const r of baseFiltered) {
+      if (!r.blok) continue;
+      const key = `${r.kebun || ""}||${r.afdeling || ""}||${r.blok || ""}`;
+      let e = map.get(key);
+      if (!e) {
+        e = { total: 0, tagged: 0 };
+        map.set(key, e);
+      }
+      e.total += 1;
+      if (isTagged(r)) e.tagged += 1;
+    }
+    let fully = 0;
+    let partial = 0;
+    let none = 0;
+    for (const e of map.values()) {
+      if (e.tagged === e.total) fully += 1;
+      else if (e.tagged === 0) none += 1;
+      else partial += 1;
+    }
+    const total = map.size;
+    return { total, fully, partial, none, belum: partial + none };
+  }, [baseFiltered]);
+
   const globalUntagged = useMemo(
     () => records.reduce((n, r) => n + (isTagged(r) ? 0 : 1), 0),
     [records]
@@ -1037,6 +1065,69 @@ export default function Dashboard() {
               {taggingStats.total
                 ? `${Math.round((taggingStats.tagged / taggingStats.total) * 100)}% lokasi sudah di-tagging`
                 : "Belum ada data"}
+            </p>
+          </div>
+        </div>
+
+        {/* Ringkasan Status Tagging per Blok */}
+        <div className="mb-8" data-testid="blok-tagging-summary-section">
+          <div className="bg-card rounded-2xl border p-4 sm:p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-lime-50 dark:bg-lime-500/10 flex items-center justify-center">
+                <Layers className="w-4 h-4 text-[#84CC16]" />
+              </div>
+              <div>
+                <h3 className="font-heading font-bold text-sm text-[#0B1D15] dark:text-emerald-50 leading-none">
+                  Status Tagging per Blok
+                </h3>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {blockTaggingStats.total.toLocaleString("id-ID")} blok · sudah = semua titik sample ter-tagging
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <div
+                data-testid="blok-summary-tagged"
+                className="text-left rounded-xl border border-emerald-100 dark:border-emerald-500/20 bg-white dark:bg-emerald-500/5 p-4"
+              >
+                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span className="text-xs font-semibold uppercase tracking-wide">Blok sudah tertagging</span>
+                </div>
+                <p className="font-heading text-3xl font-extrabold text-[#0B1D15] dark:text-emerald-50 mt-2 leading-none">
+                  {blockTaggingStats.fully.toLocaleString("id-ID")}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1.5">Semua titik sample sudah ter-tagging</p>
+              </div>
+              <div
+                data-testid="blok-summary-untagged"
+                className="text-left rounded-xl border border-amber-100 dark:border-amber-500/20 bg-white dark:bg-amber-500/5 p-4"
+              >
+                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                  <AlertCircle className="w-4 h-4" />
+                  <span className="text-xs font-semibold uppercase tracking-wide">Blok belum tertagging</span>
+                </div>
+                <p className="font-heading text-3xl font-extrabold text-[#0B1D15] dark:text-emerald-50 mt-2 leading-none">
+                  {blockTaggingStats.belum.toLocaleString("id-ID")}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1.5">
+                  {blockTaggingStats.partial.toLocaleString("id-ID")} sebagian · {blockTaggingStats.none.toLocaleString("id-ID")} kosong
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 h-2.5 w-full rounded-full bg-amber-100 overflow-hidden flex">
+              <div
+                className="h-full bg-emerald-500 transition-all"
+                style={{
+                  width: `${blockTaggingStats.total ? (blockTaggingStats.fully / blockTaggingStats.total) * 100 : 0}%`,
+                }}
+                title={`${blockTaggingStats.fully} blok sudah tertagging`}
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-2">
+              {blockTaggingStats.total
+                ? `${Math.round((blockTaggingStats.fully / blockTaggingStats.total) * 100)}% blok sudah tertagging penuh`
+                : "Belum ada data blok"}
             </p>
           </div>
         </div>
@@ -1925,7 +2016,16 @@ export default function Dashboard() {
             <div className="flex items-center gap-2 sm:ml-auto">
               <Button
                 data-testid="print-labels-button"
-                onClick={() => window.print()}
+                onClick={() => {
+                  if (
+                    previewDocs.length > 200 &&
+                    !window.confirm(
+                      `Anda akan mencetak ${previewDocs.length} label. Cetak langsung dibatasi 200 label pertama agar browser tidak berat.\n\nUntuk mencetak semua ${previewDocs.length} label, gunakan tombol "Unduh PDF".\n\nLanjutkan cetak 200 label pertama?`
+                    )
+                  )
+                    return;
+                  window.print();
+                }}
                 disabled={previewDocs.length === 0}
                 variant="outline"
                 className="h-9 border-[#84CC16]/50 text-[#4d7c0f] hover:bg-lime-50"
@@ -1944,6 +2044,18 @@ export default function Dashboard() {
           </div>
 
           <div className="overflow-y-auto flex-1 -mx-1 px-1">
+            {previewDocs.length > 200 && (
+              <div
+                data-testid="print-warning"
+                className="mb-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs px-3 py-2 flex items-start gap-2"
+              >
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>
+                  Data banyak (<b>{previewDocs.length}</b> label). <b>Cetak langsung</b> dibatasi 200 label pertama
+                  agar browser tetap ringan — untuk mencetak semuanya gunakan <b>Unduh PDF</b>.
+                </span>
+              </div>
+            )}
             {previewDocs.length === 0 ? (
               <p className="text-center text-sm text-muted-foreground py-10">Tidak ada data untuk dicetak.</p>
             ) : (

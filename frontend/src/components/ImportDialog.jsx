@@ -43,12 +43,15 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [rows, setRows] = useState(null);
+  const [skipped, setSkipped] = useState(0);
   const [importProgress, setImportProgress] = useState(null); // {done, total}
+  const [history, setHistory] = useState([]); // [{name, inserted, skipped, at}]
   const inputRef = useRef();
 
   const reset = () => {
     setFile(null);
     setRows(null);
+    setSkipped(0);
     setImportProgress(null);
   };
 
@@ -75,6 +78,7 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
         toast.error("Tidak ada baris data yang terbaca dari file");
       }
       setRows(data.rows);
+      setSkipped(data.skipped || 0);
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail));
     } finally {
@@ -96,10 +100,13 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
         inserted += data.inserted ?? batch.length;
         setImportProgress({ done: Math.min(i + CHUNK, total), total });
       }
-      toast.success(`${inserted} data berhasil diimpor`);
-      reset();
+      toast.success(`${inserted} data berhasil diimpor${skipped ? `, ${skipped} dilewati` : ""}`);
+      setHistory((h) =>
+        [{ name: file?.name || "(tanpa nama)", inserted, skipped, at: new Date() }, ...h].slice(0, 10)
+      );
       onImported();
-      onOpenChange(false);
+      reset();
+      // Dialog tetap terbuka agar Riwayat Impor terlihat; pengguna bisa impor file lain
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail));
     } finally {
@@ -189,8 +196,11 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
         ) : (
           <div data-testid="import-preview" className="rounded-xl border overflow-hidden">
             <div className="px-4 py-2 bg-muted flex items-center justify-between">
-              <span className="text-sm font-semibold text-[#0F291E]">
-                Pratinjau {rows.length} baris
+              <span className="text-sm font-semibold text-[#0F291E]" data-testid="import-preview-summary">
+                Terbaca {rows.length.toLocaleString("id-ID")} baris
+                {skipped > 0 && (
+                  <span className="ml-2 text-amber-600 font-medium">· {skipped.toLocaleString("id-ID")} dilewati</span>
+                )}
               </span>
               <button
                 type="button"
@@ -241,6 +251,36 @@ export function ImportDialog({ open, onOpenChange, onImported }) {
                 style={{ width: `${Math.round((importProgress.done / Math.max(importProgress.total, 1)) * 100)}%` }}
               />
             </div>
+          </div>
+        )}
+
+        {history.length > 0 && (
+          <div className="mt-1 rounded-xl border bg-muted/30 p-3" data-testid="import-history">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
+              Riwayat Impor (sesi ini)
+            </div>
+            <ul className="space-y-1.5 max-h-40 overflow-auto">
+              {history.map((h, i) => (
+                <li
+                  key={i}
+                  data-testid="import-history-item"
+                  className="flex items-center justify-between gap-2 text-xs bg-card rounded-lg px-3 py-1.5 border"
+                >
+                  <span className="truncate font-medium text-[#0F291E] max-w-[45%]" title={h.name}>
+                    {h.name}
+                  </span>
+                  <span className="flex items-center gap-2 whitespace-nowrap">
+                    <span className="text-emerald-600 font-semibold">+{h.inserted.toLocaleString("id-ID")} masuk</span>
+                    {h.skipped > 0 && (
+                      <span className="text-amber-600 font-medium">{h.skipped.toLocaleString("id-ID")} dilewati</span>
+                    )}
+                    <span className="text-muted-foreground">
+                      {h.at.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
