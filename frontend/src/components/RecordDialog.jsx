@@ -108,7 +108,10 @@ export function RecordDialog({ open, onOpenChange, record, onSaved }) {
     if (v === "" || v === null || v === undefined) return "";
     const n = parseFloat(String(v).replace(",", "."));
     if (Number.isNaN(n)) return "";
-    return String(n).replace(".", ",");
+    if (Number.isInteger(n)) return String(n);
+    // Maksimal 6 angka di belakang koma (nol berlebih dibuang)
+    const s = n.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
+    return s.replace(".", ",");
   };
   const idActual = `${form.kebun}${form.afdeling}${form.blok}${form.code_lsu}${fmtNum(form.koord_x)}${fmtNum(form.koord_y)}`;
   // Isi QR = sama persis dengan Id Actual

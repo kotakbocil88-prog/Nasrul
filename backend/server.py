@@ -205,14 +205,29 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
 
 # ---------------------------------------------------------------- QR helpers
 def fmt_num(v) -> str:
-    """Format koordinat memakai koma sebagai pemisah desimal (format Indonesia)."""
+    """Format koordinat memakai koma sebagai pemisah desimal (format Indonesia).
+    Maksimal 6 angka di belakang koma (nol berlebih dibuang)."""
     try:
         f = float(v)
     except (TypeError, ValueError):
         return str(v or "")
     if f == int(f):
         return str(int(f))
-    return repr(f).replace(".", ",")
+    s = f"{f:.6f}".rstrip("0").rstrip(".")
+    return s.replace(".", ",")
+
+
+def round_coords(d: dict) -> dict:
+    """Batasi koordinat maksimal 6 angka di belakang koma sebelum disimpan."""
+    for k in ("koord_x", "koord_y"):
+        val = d.get(k)
+        if val in (None, ""):
+            continue
+        try:
+            d[k] = round(float(val), 6)
+        except (TypeError, ValueError):
+            pass
+    return d
 
 
 def build_id_actual(r: dict) -> str:
@@ -413,6 +428,7 @@ async def stats(user: dict = Depends(get_current_user)):
 @api_router.post("/records")
 async def create_record(body: RecordInput, user: dict = Depends(require_admin)):
     doc = body.model_dump()
+    round_coords(doc)
     apply_derived(doc)
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     if _is_tagged(doc):
@@ -428,6 +444,7 @@ async def update_record(rid: str, body: RecordInput, user: dict = Depends(requir
     if not existing:
         raise HTTPException(status_code=404, detail="Data tidak ditemukan")
     new_data = body.model_dump()
+    round_coords(new_data)
     apply_derived(new_data)
     update = {"$set": dict(new_data)}
     now_tagged = _is_tagged(new_data)
@@ -582,6 +599,7 @@ async def import_confirm(body: ImportConfirm, user: dict = Depends(require_admin
     inserted = 0
     for r in body.rows:
         doc = r.model_dump()
+        round_coords(doc)
         apply_derived(doc)
         doc["created_at"] = datetime.now(timezone.utc).isoformat()
         if _is_tagged(doc):
