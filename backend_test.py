@@ -9,7 +9,7 @@ import sys
 from typing import Optional
 
 # Base URL from frontend/.env
-BASE_URL = "https://kotak-bocil-prog.preview.emergentagent.com/api"
+BASE_URL = "https://nasrul-project.preview.emergentagent.com/api"
 
 # Test credentials from test_credentials.md
 ADMIN_EMAIL = "admin@kebun.id"
