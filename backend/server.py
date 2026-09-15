@@ -231,8 +231,8 @@ def round_coords(d: dict) -> dict:
 
 
 def build_id_actual(r: dict) -> str:
-    """Id Actual = gabungan Kebun + Afdeling + Blok + Code LSU + Koord_X + Koord_Y (tanpa pemisah)."""
-    return (f"{r.get('kebun','')}{r.get('afdeling','')}{r.get('blok','')}{r.get('code_lsu','')}"
+    """Id Actual = gabungan Kebun + Afdeling + Blok + Titik Sample + Koord_X + Koord_Y (tanpa pemisah)."""
+    return (f"{r.get('kebun','')}{r.get('afdeling','')}{r.get('blok','')}{r.get('titik_sample','')}"
             f"{fmt_num(r.get('koord_x'))}{fmt_num(r.get('koord_y'))}")
 
 

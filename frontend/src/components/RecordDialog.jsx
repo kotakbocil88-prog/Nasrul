@@ -113,7 +113,7 @@ export function RecordDialog({ open, onOpenChange, record, onSaved }) {
     const s = n.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
     return s.replace(".", ",");
   };
-  const idActual = `${form.kebun}${form.afdeling}${form.blok}${form.code_lsu}${fmtNum(form.koord_x)}${fmtNum(form.koord_y)}`;
+  const idActual = `${form.kebun}${form.afdeling}${form.blok}${form.titik_sample}${fmtNum(form.koord_x)}${fmtNum(form.koord_y)}`;
   // Isi QR = sama persis dengan Id Actual
   const payload = idActual;
 

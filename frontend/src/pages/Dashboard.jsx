@@ -281,10 +281,10 @@ function fmtStat(v, digits) {
 }
 
 function payloadOf(r) {
-  // Isi QR = Id Actual (gabungan Kebun+Afdeling+Blok+CodeLSU+Koord_X+Koord_Y, tanpa pemisah)
+  // Isi QR = Id Actual (gabungan Kebun+Afdeling+Blok+TitikSample+Koord_X+Koord_Y, tanpa pemisah)
   return (
     r.id_actual ||
-    `${r.kebun ?? ""}${r.afdeling ?? ""}${r.blok ?? ""}${r.code_lsu ?? ""}${fmtNum(r.koord_x)}${fmtNum(r.koord_y)}`
+    `${r.kebun ?? ""}${r.afdeling ?? ""}${r.blok ?? ""}${r.titik_sample ?? ""}${fmtNum(r.koord_x)}${fmtNum(r.koord_y)}`
   );
 }
 
