@@ -29,7 +29,6 @@ import {
   Moon,
   ChevronDown,
   FileSpreadsheet,
-  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -353,7 +352,6 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState("all"); // all | tagged | untagged
   const [newRange, setNewRange] = useState("1"); // "1" | "3" | "7" (hari)
   const [onlyNew, setOnlyNew] = useState(false);
-  const [onlyDup, setOnlyDup] = useState(false);
   const [kategoriFilter, setKategoriFilter] = useState("all");
   const [tanggalFrom, setTanggalFrom] = useState("");
   const [tanggalTo, setTanggalTo] = useState("");
@@ -533,32 +531,13 @@ export default function Dashboard() {
     [newRange]
   );
 
-  // QR Ganda Cek: temukan Id Actual (isi QR) yang sama persis di lebih dari 1 baris (seluruh data)
-  const dupKeys = useMemo(() => {
-    const counts = new Map();
-    for (const r of records) {
-      const k = payloadOf(r);
-      if (!k) continue;
-      counts.set(k, (counts.get(k) || 0) + 1);
-    }
-    const dups = new Set();
-    for (const [k, c] of counts) if (c > 1) dups.add(k);
-    return dups;
-  }, [records]);
-  const isDup = (r) => dupKeys.has(payloadOf(r));
-  const dupCount = useMemo(
-    () => records.reduce((n, r) => n + (isDup(r) ? 1 : 0), 0),
-    [records, dupKeys]
-  );
-
   const filtered = useMemo(() => {
     let out = baseFiltered;
     if (statusFilter === "tagged") out = out.filter((r) => isTagged(r));
     else if (statusFilter === "untagged") out = out.filter((r) => !isTagged(r));
     if (onlyNew) out = out.filter((r) => isNew(r, newWindowMs));
-    if (onlyDup) out = out.filter((r) => dupKeys.has(payloadOf(r)));
     return out;
-  }, [baseFiltered, statusFilter, onlyNew, newWindowMs, onlyDup, dupKeys]);
+  }, [baseFiltered, statusFilter, onlyNew, newWindowMs]);
 
   // Ekspor Terpilih: deteksi filter aktif + kumpulan id hasil filter/pencarian
   const hasActiveFilter = useMemo(
@@ -569,10 +548,9 @@ export default function Dashboard() {
       kategoriFilter !== "all" ||
       statusFilter !== "all" ||
       onlyNew ||
-      onlyDup ||
       tanggalFrom !== "" ||
       tanggalTo !== "",
-    [search, kebunFilter, afdelingFilter, kategoriFilter, statusFilter, onlyNew, onlyDup, tanggalFrom, tanggalTo]
+    [search, kebunFilter, afdelingFilter, kategoriFilter, statusFilter, onlyNew, tanggalFrom, tanggalTo]
   );
   const filteredIds = useMemo(() => filtered.map((r) => r._id), [filtered]);
 
@@ -649,7 +627,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, kebunFilter, afdelingFilter, statusFilter, kategoriFilter, tanggalFrom, tanggalTo, pageSize, onlyNew, onlyDup]);
+  }, [search, kebunFilter, afdelingFilter, statusFilter, kategoriFilter, tanggalFrom, tanggalTo, pageSize, onlyNew]);
 
   // Reset filter afdeling bila kebun berubah dan afdeling tak lagi tersedia
   useEffect(() => {
@@ -809,11 +787,10 @@ export default function Dashboard() {
     if (statusFilter === "tagged") parts.push("Sudah di-tagging");
     if (statusFilter === "untagged") parts.push("Belum di-tagging");
     if (onlyNew) parts.push("Baru");
-    if (onlyDup) parts.push("Ganda (duplikat)");
     if (tanggalFrom) parts.push(`Dari: ${tanggalFrom}`);
     if (tanggalTo) parts.push(`Sampai: ${tanggalTo}`);
     return parts;
-  }, [search, kebunFilter, afdelingFilter, kategoriFilter, statusFilter, onlyNew, onlyDup, tanggalFrom, tanggalTo]);
+  }, [search, kebunFilter, afdelingFilter, kategoriFilter, statusFilter, onlyNew, tanggalFrom, tanggalTo]);
 
   // Chip filter aktif yang bisa dihapus satu per satu
   const filterChips = useMemo(() => {
@@ -831,12 +808,11 @@ export default function Dashboard() {
     if (statusFilter === "untagged")
       chips.push({ key: "status", label: "Belum di-tagging", clear: () => setStatusFilter("all") });
     if (onlyNew) chips.push({ key: "new", label: "Baru", clear: () => setOnlyNew(false) });
-    if (onlyDup) chips.push({ key: "dup", label: "Ganda (duplikat)", clear: () => setOnlyDup(false) });
     if (tanggalFrom)
       chips.push({ key: "from", label: `Dari: ${tanggalFrom}`, clear: () => setTanggalFrom("") });
     if (tanggalTo) chips.push({ key: "to", label: `Sampai: ${tanggalTo}`, clear: () => setTanggalTo("") });
     return chips;
-  }, [search, kebunFilter, afdelingFilter, kategoriFilter, statusFilter, onlyNew, onlyDup, tanggalFrom, tanggalTo]);
+  }, [search, kebunFilter, afdelingFilter, kategoriFilter, statusFilter, onlyNew, tanggalFrom, tanggalTo]);
 
   const resetAllFilters = () => {
     setSearch("");
@@ -845,7 +821,6 @@ export default function Dashboard() {
     setKategoriFilter("all");
     setStatusFilter("all");
     setOnlyNew(false);
-    setOnlyDup(false);
     setTanggalFrom("");
     setTanggalTo("");
   };
@@ -1452,29 +1427,6 @@ export default function Dashboard() {
               </Select>
             </div>
 
-            {/* Filter cepat "Ganda" (QR/Id Actual duplikat) */}
-            <button
-              type="button"
-              data-testid="filter-dup-toggle"
-              onClick={() => setOnlyDup((v) => !v)}
-              title="Tampilkan hanya baris dengan Id Actual / QR yang sama persis (duplikat)"
-              className={`inline-flex items-center gap-1.5 h-11 px-3.5 rounded-xl border text-sm font-medium transition-colors whitespace-nowrap ${
-                onlyDup
-                  ? "bg-rose-600 text-white border-rose-600 shadow-sm"
-                  : "bg-white dark:bg-card text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-500/30 hover:bg-rose-50 dark:hover:bg-rose-500/10"
-              }`}
-            >
-              <Copy className="w-4 h-4" /> Ganda
-              <span
-                className={`ml-0.5 rounded-full px-1.5 text-[11px] font-bold ${
-                  onlyDup ? "bg-white/20 text-white" : "bg-rose-100 text-rose-700"
-                }`}
-                data-testid="dup-count-badge"
-              >
-                {dupCount}
-              </span>
-            </button>
-
             {/* Aksi data (admin) */}
             {isAdmin && (
               <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
@@ -1879,15 +1831,6 @@ export default function Dashboard() {
                               className="inline-flex items-center gap-1 rounded-full bg-sky-100 text-sky-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
                             >
                               <Sparkles className="w-3 h-3" /> Baru
-                            </span>
-                          )}
-                          {isDup(r) && (
-                            <span
-                              data-testid={`badge-dup-${r._id}`}
-                              title="Id Actual / QR ini sama persis dengan baris lain (duplikat)"
-                              className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-                            >
-                              <Copy className="w-3 h-3" /> Ganda
                             </span>
                           )}
                         </div>
