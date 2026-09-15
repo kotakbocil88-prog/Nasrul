@@ -254,9 +254,9 @@ function cellValue(r, key, kind) {
 
 // Metrik agronomi untuk panel ringkasan
 const AGRO_METRICS = [
-  { key: "lai", label: "LAI", unit: "", digits: 4, showTotal: false },
+  { key: "lai", label: "LAI", unit: "", digits: 1, showTotal: false },
   { key: "panjang_pelepah", label: "Panjang Pelepah", unit: "cm", digits: 1, showTotal: false },
-  { key: "sph", label: "SPH", unit: "pkk/ha", digits: 2, showTotal: false },
+  { key: "sph", label: "SPH", unit: "pkk/ha", digits: 1, showTotal: false },
   { key: "jumlah_pelepah", label: "Jumlah Pelepah", unit: "", digits: 1, showTotal: true },
 ];
 
@@ -277,8 +277,7 @@ function metricStats(list, key) {
 
 function fmtStat(v, digits) {
   if (v === null || v === undefined || !Number.isFinite(v)) return "-";
-  const r = Math.round(v * 10 ** digits) / 10 ** digits;
-  return String(r).replace(".", ",");
+  return v.toFixed(digits).replace(".", ",");
 }
 
 function payloadOf(r) {
