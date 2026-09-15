@@ -12,7 +12,7 @@ import io
 from typing import Optional, List
 
 # Base URL from frontend/.env
-BASE_URL = "https://nasrul-project.preview.emergentagent.com/api"
+BASE_URL = "https://nasrul-epcs-1.preview.emergentagent.com/api"
 
 # Test credentials (from backend/.env)
 ADMIN_EMAIL = "admin@eqms.id"
