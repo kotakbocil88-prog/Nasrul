@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@/index.css";
 import App from "@/App";
+import { registerServiceWorker } from "@/pwa";
 
 // Apply theme before first paint to avoid flash:
 // - honour a saved manual choice, otherwise follow the device theme
@@ -35,3 +36,5 @@ root.render(
     </QueryClientProvider>
   </React.StrictMode>,
 );
+
+registerServiceWorker();

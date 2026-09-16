@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
+import PwaControls from "@/components/PwaControls";
 
 function ProtectedRoute({ children }) {
   const { user, checking } = useAuth();
@@ -37,6 +38,7 @@ function App() {
           </Routes>
         </BrowserRouter>
         <Toaster position="top-right" richColors />
+        <PwaControls />
       </AuthProvider>
     </div>
   );
