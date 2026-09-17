@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -38,6 +38,70 @@ api_router = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------- Realtime (WebSocket)
+class ConnectionManager:
+    def __init__(self):
+        self.active = set()
+
+    async def connect(self, ws: WebSocket):
+        await ws.accept()
+        self.active.add(ws)
+
+    def disconnect(self, ws: WebSocket):
+        self.active.discard(ws)
+
+    async def broadcast(self, message: dict):
+        dead = []
+        for ws in list(self.active):
+            try:
+                await ws.send_json(message)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.active.discard(ws)
+
+
+manager = ConnectionManager()
+
+
+async def broadcast_change(event: str, **extra):
+    """Kirim notifikasi perubahan data ke semua klien (dashboard web) secara real-time."""
+    try:
+        await manager.broadcast({"type": event, "ts": datetime.now(timezone.utc).isoformat(), **extra})
+    except Exception as e:
+        logger.warning(f"broadcast failed: {e}")
+
+
+@app.websocket("/api/ws")
+async def ws_endpoint(ws: WebSocket):
+    await manager.connect(ws)
+    try:
+        while True:
+            # keepalive; klien boleh mengirim ping, isinya diabaikan
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(ws)
+    except Exception:
+        manager.disconnect(ws)
+
+
+def haversine_m(lat1, lon1, lat2, lon2) -> float:
+    """Jarak antar dua titik lat/lng dalam meter."""
+    from math import radians, sin, cos, sqrt, atan2
+    R = 6371000.0
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    return R * 2 * atan2(sqrt(a), sqrt(1 - a))
+
+
+def mobile_tolerance_m() -> float:
+    try:
+        return float(os.environ.get("MOBILE_TOLERANCE_M", "5"))
+    except (TypeError, ValueError):
+        return 5.0
 
 # ---------------------------------------------------------------- Models
 PyObjectId = Annotated[str, BeforeValidator(str)]
@@ -135,6 +199,30 @@ class IdList(BaseModel):
     size: str = "medium"
 
 
+class MobileVerify(BaseModel):
+    qr: str = ""
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    accuracy: Optional[float] = None
+
+
+class MobileSubmit(BaseModel):
+    record_id: str
+    qr: str = ""
+    lat: float
+    lng: float
+    accuracy: Optional[float] = None
+    jumlah_pelepah: float = 0
+    panjang_pelepah: float = 0
+    lebar_petiol: float = 0
+    tebal_petiol: float = 0
+    panjang_helai_1: float = 0
+    panjang_helai_2: float = 0
+    lebar_helai_1: float = 0
+    lebar_helai_2: float = 0
+    jumlah_anak_daun: float = 0
+
+
 class UserRegister(BaseModel):
     email: str
     password: str
@@ -200,6 +288,13 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     Viewer hanya bisa melihat & mencetak."""
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Akses ditolak: hanya admin yang dapat mengubah data")
+    return user
+
+
+async def require_writer(user: dict = Depends(get_current_user)) -> dict:
+    """Admin atau Petugas boleh menyimpan data pengukuran (via aplikasi mobile)."""
+    if user.get("role") not in ("admin", "petugas"):
+        raise HTTPException(status_code=403, detail="Akses ditolak: hanya admin/petugas")
     return user
 
 
@@ -435,7 +530,9 @@ async def create_record(body: RecordInput, user: dict = Depends(require_admin)):
         doc["tagged_at"] = doc["created_at"]
     res = await db.records.insert_one(doc)
     saved = await db.records.find_one({"_id": res.inserted_id})
-    return serialize(saved)
+    out = serialize(saved)
+    await broadcast_change("record_created", id=out["_id"], id_actual=out.get("id_actual"))
+    return out
 
 
 @api_router.put("/records/{rid}")
@@ -454,18 +551,22 @@ async def update_record(rid: str, body: RecordInput, user: dict = Depends(requir
         update["$unset"] = {"tagged_at": ""}
     await db.records.update_one({"_id": ObjectId(rid)}, update)
     saved = await db.records.find_one({"_id": ObjectId(rid)})
-    return serialize(saved)
+    out = serialize(saved)
+    await broadcast_change("record_updated", id=out["_id"], id_actual=out.get("id_actual"))
+    return out
 
 
 @api_router.delete("/records/{rid}")
 async def delete_record(rid: str, user: dict = Depends(require_admin)):
     await db.records.delete_one({"_id": ObjectId(rid)})
+    await broadcast_change("record_deleted", id=rid)
     return {"ok": True}
 
 
 @api_router.delete("/records")
 async def delete_all(user: dict = Depends(require_admin)):
     await db.records.delete_many({})
+    await broadcast_change("records_bulk_changed")
     return {"ok": True}
 
 
@@ -475,6 +576,7 @@ async def delete_bulk(body: IdList, user: dict = Depends(require_admin)):
         return {"ok": True, "deleted": 0}
     oids = [ObjectId(i) for i in body.ids]
     res = await db.records.delete_many({"_id": {"$in": oids}})
+    await broadcast_change("records_bulk_changed", deleted=res.deleted_count)
     return {"ok": True, "deleted": res.deleted_count}
 
 
@@ -610,6 +712,7 @@ async def import_confirm(body: ImportConfirm, user: dict = Depends(require_admin
         docs.append(doc)
     if docs:
         await db.records.insert_many(docs)
+    await broadcast_change("records_bulk_changed", inserted=len(docs))
     return {"inserted": len(docs)}
 
 
@@ -969,6 +1072,139 @@ async def export_untagged_excel(user: dict = Depends(get_current_user)):
     return _excel_response(build_untagged_excel(untagged), "daftar_belum_tagging.xlsx")
 
 
+# ---------------------------------------------------------------- Mobile (scan QR + lokasi)
+def _mobile_identity(rec: dict) -> dict:
+    """Field identitas + pengukuran terkini yang dikirim ke aplikasi mobile."""
+    return {
+        "id": rec["_id"],
+        "id_actual": rec.get("id_actual", ""),
+        "kebun": rec.get("kebun", ""),
+        "afdeling": rec.get("afdeling", ""),
+        "code_lsu": rec.get("code_lsu", ""),
+        "blok": rec.get("blok", ""),
+        "kategori": rec.get("kategori", ""),
+        "luas_ha": rec.get("luas_ha", 0),
+        "jumlah_pokok": rec.get("jumlah_pokok", 0),
+        "titik_sample": rec.get("titik_sample", ""),
+        "koord_x": rec.get("koord_x", 0),
+        "koord_y": rec.get("koord_y", 0),
+        "jumlah_pelepah": rec.get("jumlah_pelepah", 0),
+        "panjang_pelepah": rec.get("panjang_pelepah", 0),
+        "lebar_petiol": rec.get("lebar_petiol", 0),
+        "tebal_petiol": rec.get("tebal_petiol", 0),
+        "panjang_helai_1": rec.get("panjang_helai_1", 0),
+        "panjang_helai_2": rec.get("panjang_helai_2", 0),
+        "lebar_helai_1": rec.get("lebar_helai_1", 0),
+        "lebar_helai_2": rec.get("lebar_helai_2", 0),
+        "jumlah_anak_daun": rec.get("jumlah_anak_daun", 0),
+        "measured_at": rec.get("measured_at"),
+        "measured_by": rec.get("measured_by"),
+    }
+
+
+@api_router.get("/mobile/config")
+async def mobile_config(user: dict = Depends(get_current_user)):
+    return {"tolerance_m": mobile_tolerance_m()}
+
+
+@api_router.post("/mobile/verify")
+async def mobile_verify(body: MobileVerify, user: dict = Depends(get_current_user)):
+    """Cocokkan isi QR (= Id Actual) dengan data & hitung jarak lokasi saat ini."""
+    qr = (body.qr or "").strip()
+    tol = mobile_tolerance_m()
+    if not qr:
+        raise HTTPException(status_code=400, detail="QR kosong")
+    docs = await db.records.find().to_list(200000)
+    matches = [d for d in docs if build_id_actual(d) == qr]
+    if not matches:
+        return {"qr_found": False, "tolerance_m": tol, "ok": False,
+                "message": "QR tidak cocok dengan data manapun"}
+    chosen = matches[0]
+    distance = None
+    if body.lat is not None and body.lng is not None:
+        best = None
+        for d in matches:
+            try:
+                ry = float(d.get("koord_y") or 0)  # lat
+                rx = float(d.get("koord_x") or 0)  # lng
+            except (TypeError, ValueError):
+                continue
+            if ry == 0 and rx == 0:
+                continue
+            dist = haversine_m(body.lat, body.lng, ry, rx)
+            if best is None or dist < best[0]:
+                best = (dist, d)
+        if best:
+            distance, chosen = best
+    rec = serialize(chosen)
+    within = distance is not None and distance <= tol
+    return {
+        "qr_found": True,
+        "tolerance_m": tol,
+        "distance_m": round(distance, 2) if distance is not None else None,
+        "within_tolerance": within,
+        "location_ok": within,
+        "ok": bool(within),
+        "record": _mobile_identity(rec),
+    }
+
+
+@api_router.post("/mobile/submit")
+async def mobile_submit(body: MobileSubmit, user: dict = Depends(require_writer)):
+    """Simpan hasil pengukuran agronomi dari mobile setelah QR & lokasi tervalidasi."""
+    try:
+        existing = await db.records.find_one({"_id": ObjectId(body.record_id)})
+    except Exception:
+        existing = None
+    if not existing:
+        raise HTTPException(status_code=404, detail="Data tidak ditemukan")
+    # Validasi ulang di server: QR harus sama dengan Id Actual data
+    if (body.qr or "").strip() != build_id_actual(existing):
+        raise HTTPException(status_code=400, detail="QR tidak cocok dengan data")
+    # Validasi ulang jarak lokasi
+    tol = mobile_tolerance_m()
+    try:
+        ry = float(existing.get("koord_y") or 0)
+        rx = float(existing.get("koord_x") or 0)
+    except (TypeError, ValueError):
+        ry = rx = 0
+    if ry == 0 and rx == 0:
+        raise HTTPException(status_code=400, detail="Titik ini belum punya koordinat acuan")
+    distance = haversine_m(body.lat, body.lng, ry, rx)
+    if distance > tol:
+        raise HTTPException(status_code=400,
+                            detail=f"Lokasi terlalu jauh ({round(distance, 1)} m > {tol} m)")
+    meas = {
+        "jumlah_pelepah": body.jumlah_pelepah,
+        "panjang_pelepah": body.panjang_pelepah,
+        "lebar_petiol": body.lebar_petiol,
+        "tebal_petiol": body.tebal_petiol,
+        "panjang_helai_1": body.panjang_helai_1,
+        "panjang_helai_2": body.panjang_helai_2,
+        "lebar_helai_1": body.lebar_helai_1,
+        "lebar_helai_2": body.lebar_helai_2,
+        "jumlah_anak_daun": body.jumlah_anak_daun,
+    }
+    merged = dict(existing)
+    merged.update(meas)
+    apply_derived(merged)
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"$set": {
+        **meas,
+        "sph": merged.get("sph", 0), "la": merged.get("la", 0), "lai": merged.get("lai", 0),
+        "measured_at": now, "measured_by": user.get("email"),
+        "measured_lat": body.lat, "measured_lng": body.lng,
+        "measured_distance_m": round(distance, 2),
+    }}
+    await db.records.update_one({"_id": existing["_id"]}, update)
+    saved = await db.records.find_one({"_id": existing["_id"]})
+    rec = serialize(saved)
+    await broadcast_change("record_updated", id=rec["_id"], id_actual=rec.get("id_actual"),
+                           by=user.get("email"), source="mobile")
+    return {"ok": True, "distance_m": round(distance, 2), "record": rec}
+
+
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -1014,6 +1250,25 @@ async def startup():
             updates["role"] = "viewer"
         if updates:
             await db.users.update_one({"email": viewer_email}, {"$set": updates})
+
+    # Seed petugas (field surveyor: hanya scan QR + isi form pengukuran via mobile)
+    petugas_email = os.environ.get("PETUGAS_EMAIL", "petugas@eqms.id").lower()
+    petugas_pw = os.environ.get("PETUGAS_PASSWORD", "PETUGAS1234")
+    petugas_existing = await db.users.find_one({"email": petugas_email})
+    if petugas_existing is None:
+        await db.users.insert_one({
+            "email": petugas_email, "password_hash": hash_password(petugas_pw),
+            "name": "Petugas Lapangan", "role": "petugas",
+            "created_at": datetime.now(timezone.utc).isoformat()})
+        logger.info("Petugas seeded")
+    else:
+        updates = {}
+        if not verify_password(petugas_pw, petugas_existing["password_hash"]):
+            updates["password_hash"] = hash_password(petugas_pw)
+        if petugas_existing.get("role") != "petugas":
+            updates["role"] = "petugas"
+        if updates:
+            await db.users.update_one({"email": petugas_email}, {"$set": updates})
 
 
 @app.on_event("shutdown")

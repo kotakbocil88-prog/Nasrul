@@ -435,6 +435,55 @@ export default function Dashboard() {
     load();
   }, []);
 
+  // ---- Sinkronisasi real-time (WebSocket + polling fallback 20 dtk) ----
+  useEffect(() => {
+    let ws;
+    let pollId;
+    let stopped = false;
+    const refreshSilent = async () => {
+      try {
+        const [r, s, p] = await Promise.all([
+          api.get("/records"),
+          api.get("/records/stats"),
+          api.get("/records/tagging-progress"),
+        ]);
+        if (stopped) return;
+        setRecords(r.data);
+        setStats(s.data);
+        setProgress(p.data);
+      } catch (e) {
+        /* diam: jangan ganggu UI saat refresh latar */
+      }
+    };
+    try {
+      const base = process.env.REACT_APP_BACKEND_URL || "";
+      const wsUrl = base.replace(/^http/, "ws") + "/api/ws";
+      ws = new WebSocket(wsUrl);
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg && msg.type) {
+            refreshSilent();
+            if (msg.source === "mobile") toast.success("Data lapangan baru masuk (real-time)");
+          }
+        } catch (e) {
+          /* abaikan pesan non-JSON */
+        }
+      };
+      ws.onerror = () => {
+        try { ws.close(); } catch (e) { /* ignore */ }
+      };
+    } catch (e) {
+      /* WebSocket tidak tersedia; polling tetap jalan */
+    }
+    pollId = setInterval(refreshSilent, 20000);
+    return () => {
+      stopped = true;
+      if (ws) { try { ws.close(); } catch (e) { /* ignore */ } }
+      if (pollId) clearInterval(pollId);
+    };
+  }, []);
+
   const kebunOptions = useMemo(
     () => [...new Set(records.map((r) => r.kebun).filter(Boolean))],
     [records]

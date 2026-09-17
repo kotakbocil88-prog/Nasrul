@@ -618,3 +618,82 @@ agent_communication:
     - agent: "testing"
       message: "✅ ALL 4 FEATURES PASSED (100% success rate). Comprehensive testing completed with ~12,525 production records (kebun KSD/KSL). FEATURE 1 (MOST IMPORTANT) - Block Tagging Summary: ✅ PASS. Section found with correct structure, title 'Status Tagging per Blok', 2 stat cards (68 tagged, 499 untagged with '348 sebagian · 151 kosong' subtext), progress bar, percentage text '12% blok sudah tertagging penuh', reactivity verified (numbers changed from 68 to 16 when filtering). FEATURE 2 - Export Scope Toggle: ✅ PASS. Export menu button found, both scope buttons present ('Semua (12525)' and 'Hasil filter (12525)'), clicking 'Hasil filter' makes it active (bg-card class), export functionality works (file download triggered, toast appeared). FEATURE 3 - Import Progress & History: ✅ PASS (with automated test limitations). Import dialog opens, template button found, dropzone found, Pratinjau button found (disabled without file). All progress/history elements (import-preview-summary, import-progress, import-progress-text, import-history, import-history-item) verified to exist in code with correct data-testids and conditional rendering logic. Cannot test actual file upload in automated test. FEATURE 4 - Print Warning: ✅ PASS. Preview dialog opens with 12,525 labels, print warning found (data-testid='print-warning') with correct text 'Cetak langsung dibatasi 200 label pertama', print button found, window.confirm dialog APPEARED when clicking print with >200 labels, confirm message mentions 200 limit, download PDF button also present. SAFETY CONFIRMED: Read-only testing, NO data modifications, ~12,525 production records preserved. All features working perfectly as specified. Screenshots saved: feature1_block_summary.png, feature2_export_scope.png, feature3_import_dialog.png, feature4_print_warning.png."
 
+
+## --- Update (Aplikasi Mobile: Scan QR + Lokasi + Form Agronomi, Real-time) ---
+backend:
+  - task: "Mobile config endpoint (GET /api/mobile/config)"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "GET /api/mobile/config mengembalikan {tolerance_m}. Default 5 (dari env MOBILE_TOLERANCE_M). Perlu auth (get_current_user)."
+  - task: "Mobile verify endpoint (POST /api/mobile/verify)"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "POST /api/mobile/verify {qr,lat,lng} -> cocokkan qr dengan build_id_actual(record). Balikan qr_found, distance_m (Haversine, x=lng/y=lat), within_tolerance, ok, dan record identitas (kebun,afdeling,code_lsu,blok,kategori,luas_ha,jumlah_pokok,titik_sample,koord + pengukuran existing). Jika beberapa record ber-id_actual sama, pilih terdekat. DEMO data tersedia (kebun=DEMO): id_actual 'DEMO1A01TS01109,8885770,164244' di lat=0.164244,lng=109.888577. Test: verify di titik tsb -> qr_found true, ok true, distance ~0. Verify 50m jauh -> ok false. Verify qr ngawur -> qr_found false."
+  - task: "Mobile submit endpoint (POST /api/mobile/submit) + role petugas"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "POST /api/mobile/submit {record_id,qr,lat,lng,measurement fields} dilindungi require_writer (role admin ATAU petugas). Validasi ulang server-side: qr harus == build_id_actual(record) (else 400), jarak <= tolerance (else 400 'Lokasi terlalu jauh'). Simpan 9 field pengukuran (jumlah_pelepah,panjang_pelepah,lebar_petiol,tebal_petiol,panjang_helai_1/2,lebar_helai_1/2,jumlah_anak_daun) + recompute sph/la/lai + measured_at/by/lat/lng/distance. Broadcast websocket 'record_updated' source=mobile. Test: submit dalam toleransi -> ok true, record.lai terhitung; submit di luar toleransi -> 400; submit sebagai viewer (ras2026@eqms.id/RAS1234) -> 403; submit sebagai petugas (petugas@eqms.id/PETUGAS1234) -> ok."
+  - task: "Realtime broadcast on record mutations (WebSocket /api/ws)"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "WebSocket /api/ws broadcast pesan JSON saat create/update/delete/delete-bulk/import/mobile-submit. Dipakai dashboard untuk refresh real-time. Test opsional: connect ws lalu picu perubahan; namun fokus utama endpoint mobile."
+
+frontend:
+  - task: "Mobile app page (/mobile) scan QR + lokasi + form"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/Mobile.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Halaman /mobile (login petugas otomatis redirect ke sini). Alur: scan kamera html5-qrcode ATAU input manual QR; GPS watchPosition (atau lokasi manual via toggle-manual-loc + manual-lat/manual-lng). Verify -> tampil status QR & lokasi (location-status), form terkunci (result-continue disabled) sampai QR cocok & jarak<=5m. Form (step-form) auto-isi identitas read-only + 9 input pengukuran (meas-*). Submit (submit-form) -> step-done (LAI/SPH/jarak). Belum diuji otomatis (butuh izin user untuk uji frontend)."
+
+metadata:
+  created_by: "main_agent"
+  version: "2.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Mobile verify endpoint (POST /api/mobile/verify)"
+    - "Mobile submit endpoint (POST /api/mobile/submit) + role petugas"
+    - "Mobile config endpoint (GET /api/mobile/config)"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: "UJI BACKEND fitur MOBILE baru (fokus 3 endpoint). Kredensial: petugas@eqms.id/PETUGAS1234 (role petugas, BISA submit), admin@eqms.id/EQMS1234 (bisa semua), ras2026@eqms.id/RAS1234 (viewer, TIDAK bisa submit). DEMO record tersedia (kebun=DEMO): id_actual='DEMO1A01TS01109,8885770,164244' pada lat=0.164244 lng=109.888577 (x=lng,y=lat). SKENARIO: (1) GET /api/mobile/config -> {tolerance_m:5}. (2) POST /api/mobile/verify {qr:'DEMO1A01TS01109,8885770,164244',lat:0.164244,lng:109.888577} -> qr_found true, ok true, distance_m ~0, record.kebun='DEMO'. (3) verify lat=0.164694 (≈50m) -> ok false, within_tolerance false. (4) verify qr:'NGAWUR' -> qr_found false. (5) POST /api/mobile/submit login petugas {record_id:(dari verify), qr sama, lat=0.164244,lng=109.888577, jumlah_pelepah:40,panjang_pelepah:500,lebar_petiol:6.5,tebal_petiol:3.2,panjang_helai_1:95,panjang_helai_2:96,lebar_helai_1:5,lebar_helai_2:5.1,jumlah_anak_daun:300} -> ok true, distance_m<=5, record.lai>0. (6) submit dengan lat=0.164694 (jauh) -> HTTP 400. (7) submit qr salah -> 400. (8) submit sebagai viewer -> 403. (9) submit sebagai petugas OK, sebagai admin OK. CATATAN: gunakan HANYA record kebun=DEMO. Jangan buat/hapus data lain."

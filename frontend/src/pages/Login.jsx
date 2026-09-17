@@ -36,7 +36,7 @@ export default function Login() {
     try {
       const { data } = await api.post("/auth/login", { email, password });
       setUser(data);
-      navigate("/");
+      navigate(data.role === "petugas" ? "/mobile" : "/");
     } catch (err) {
       setError(formatApiErrorDetail(err.response?.data?.detail) || err.message);
     } finally {

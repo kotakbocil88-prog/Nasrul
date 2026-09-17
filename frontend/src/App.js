@@ -5,8 +5,9 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
+import Mobile from "@/pages/Mobile";
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children, allow }) {
   const { user, checking } = useAuth();
   if (checking || user === null)
     return (
@@ -15,6 +16,8 @@ function ProtectedRoute({ children }) {
       </div>
     );
   if (!user) return <Navigate to="/login" replace />;
+  // Petugas lapangan hanya boleh mengakses aplikasi mobile
+  if (user.role === "petugas" && allow !== "petugas") return <Navigate to="/mobile" replace />;
   return children;
 }
 
@@ -30,6 +33,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/mobile"
+              element={
+                <ProtectedRoute allow="petugas">
+                  <Mobile />
                 </ProtectedRoute>
               }
             />
