@@ -1,15 +1,28 @@
 import React, { useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, MapPin, Crosshair, Save, Leaf, Lock, Navigation, Ruler } from "lucide-react";
+import {
+  ArrowLeft, MapPin, Crosshair, Save, Leaf, Lock, Navigation, Ruler,
+  ScanLine, CheckCircle2, Circle,
+} from "lucide-react";
 import api, { formatApiErrorDetail } from "@/lib/api";
-import { buildPayload, MEASUREMENT_FIELDS, recordTitle, isTagged, fmtNum, haversineMeters, fmtDistance } from "@/lib/recordFields";
+import {
+  buildPayload, MEASUREMENT_FIELDS, recordTitle, isTagged, fmtNum,
+  haversineMeters, fmtDistance, coordFilled,
+} from "@/lib/recordFields";
 import { enqueueUpdate } from "@/lib/offlineQueue";
 
-export default function MobileDetail({ record, isEditor, online, onBack, onSaved }) {
-  const [koordX, setKoordX] = useState(record.koord_x != null ? String(record.koord_x) : "");
-  const [koordY, setKoordY] = useState(record.koord_y != null ? String(record.koord_y) : "");
+const MAX_MOVE_M = 4; // toleransi jarak GPS terhadap titik koordinat yang ada (meter)
+
+export default function MobileDetail({ record, isEditor, online, viaScan, onBack, onSaved }) {
+  const refX = Number(record.koord_x) || 0; // koordinat acuan (bujur)
+  const refY = Number(record.koord_y) || 0; // koordinat acuan (lintang)
+  const hasRef = coordFilled(refX) && coordFilled(refY);
+
+  const [koordX, setKoordX] = useState(hasRef ? String(refX) : "");
+  const [koordY, setKoordY] = useState(hasRef ? String(refY) : "");
   const [accuracy, setAccuracy] = useState(null);
   const [gpsBusy, setGpsBusy] = useState(false);
+  const [gpsDone, setGpsDone] = useState(false); // GPS diambil & lolos syarat pada sesi ini
   const [saving, setSaving] = useState(false);
   const [distance, setDistance] = useState(null);
   const [distBusy, setDistBusy] = useState(false);
@@ -22,17 +35,32 @@ export default function MobileDetail({ record, isEditor, online, onBack, onSaved
     return m;
   });
 
+  // Mode isi data hanya aktif bila dibuka via Scan QR & user boleh edit
+  const canFill = Boolean(viaScan && isEditor);
+  const measUnlocked = canFill && gpsDone;
+  const allMeasFilled = MEASUREMENT_FIELDS.every((f) => String(meas[f.key]).trim() !== "");
+  const canSave = measUnlocked && allMeasFilled;
+
   const takeGps = () => {
     if (!navigator.geolocation) { toast.error("Perangkat tidak mendukung GPS"); return; }
     setGpsBusy(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude, accuracy: acc } = pos.coords;
-        setKoordY(String(latitude));   // Y = lintang (lat)
-        setKoordX(String(longitude));  // X = bujur (lng)
+        if (hasRef) {
+          const d = haversineMeters(latitude, longitude, refY, refX);
+          if (d > MAX_MOVE_M) {
+            setGpsBusy(false);
+            toast.error(`Koordinat terlalu jauh (${Math.round(d)} m) dari titik. Maksimal ${MAX_MOVE_M} m — dekati titik lalu ulangi.`);
+            return;
+          }
+        }
+        setKoordY(String(latitude));   // Y = lintang
+        setKoordX(String(longitude));  // X = bujur
         setAccuracy(acc ? Math.round(acc) : null);
+        setGpsDone(true);
         setGpsBusy(false);
-        toast.success("Koordinat GPS diambil");
+        toast.success("Koordinat GPS terverifikasi");
       },
       (err) => {
         setGpsBusy(false);
@@ -43,17 +71,12 @@ export default function MobileDetail({ record, isEditor, online, onBack, onSaved
   };
 
   const parseCoord = (v) => Number(String(v).replace(",", "."));
-  const hasCoord = () => {
-    const x = parseCoord(koordX);
-    const y = parseCoord(koordY);
-    return Number.isFinite(x) && Number.isFinite(y) && (x !== 0 || y !== 0);
-  };
+  const navX = gpsDone ? parseCoord(koordX) : refX;
+  const navY = gpsDone ? parseCoord(koordY) : refY;
+  const showNav = hasRef || gpsDone;
 
   const openMaps = () => {
-    const x = parseCoord(koordX);
-    const y = parseCoord(koordY);
-    // Google Maps directions: destination lat,lng (origin = posisi perangkat)
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${y},${x}`, "_blank");
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${navY},${navX}`, "_blank");
   };
 
   const calcDistance = () => {
@@ -61,9 +84,7 @@ export default function MobileDetail({ record, isEditor, online, onBack, onSaved
     setDistBusy(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const x = parseCoord(koordX);
-        const y = parseCoord(koordY);
-        setDistance(haversineMeters(pos.coords.latitude, pos.coords.longitude, y, x));
+        setDistance(haversineMeters(pos.coords.latitude, pos.coords.longitude, navY, navX));
         setDistBusy(false);
       },
       (err) => {
@@ -75,12 +96,17 @@ export default function MobileDetail({ record, isEditor, online, onBack, onSaved
   };
 
   const handleSave = async () => {
+    if (!canSave) {
+      if (!gpsDone) toast.error("Ambil koordinat GPS terlebih dahulu");
+      else if (!allMeasFilled) toast.error("Semua field pengukuran wajib diisi");
+      return;
+    }
     const overrides = {
-      koord_x: koordX === "" ? 0 : Number(String(koordX).replace(",", ".")),
-      koord_y: koordY === "" ? 0 : Number(String(koordY).replace(",", ".")),
+      koord_x: parseCoord(koordX),
+      koord_y: parseCoord(koordY),
     };
     MEASUREMENT_FIELDS.forEach((f) => {
-      overrides[f.key] = meas[f.key] === "" ? 0 : Number(String(meas[f.key]).replace(",", "."));
+      overrides[f.key] = meas[f.key] === "" ? 0 : parseCoord(meas[f.key]);
     });
     const payload = buildPayload(record, overrides);
     setSaving(true);
@@ -99,7 +125,6 @@ export default function MobileDetail({ record, isEditor, online, onBack, onSaved
       onSaved(res.data, false);
     } catch (e) {
       if (!e.response) {
-        // kegagalan jaringan -> antre offline
         await enqueueUpdate(record._id, payload, { title: recordTitle(record) });
         toast.success("Koneksi terputus — disimpan ke antrian");
         setSaving(false);
@@ -142,30 +167,56 @@ export default function MobileDetail({ record, isEditor, online, onBack, onSaved
           </div>
         )}
 
+        {isEditor && !viaScan && (
+          <div data-testid="scan-required" className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl px-3 py-2.5">
+            <ScanLine className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>Untuk <b>mengisi / memperbarui</b> data, buka lokasi ini melalui menu <b>Scan</b> lalu pindai QR-nya. Halaman ini hanya menampilkan data.</span>
+          </div>
+        )}
+
+        {/* Langkah wajib (bertahap) */}
+        {canFill && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-2">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Langkah Wajib</div>
+            <Step done={true} label="1. Scan QR lokasi" hint="Terverifikasi" />
+            <Step done={gpsDone} label="2. Ambil koordinat GPS" hint={gpsDone ? "Selesai" : "Belum"} />
+            <Step done={measUnlocked && allMeasFilled} label="3. Isi data pengukuran" hint={measUnlocked ? (allMeasFilled ? "Lengkap" : "Belum lengkap") : "Terkunci"} />
+          </div>
+        )}
+
         {/* Koordinat GPS */}
         <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
             <MapPin className="h-4 w-4 text-emerald-600" /> Koordinat Tagging
           </div>
-          <button
-            data-testid="gps-btn"
-            onClick={takeGps}
-            disabled={!isEditor || gpsBusy}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold text-sm disabled:opacity-50"
-          >
-            <Crosshair className={`h-4 w-4 ${gpsBusy ? "animate-pulse" : ""}`} /> {gpsBusy ? "Mengambil GPS..." : "Ambil Koordinat GPS"}
-          </button>
-          {accuracy != null && (
-            <div className="text-[11px] text-slate-500 text-center">Akurasi ±{accuracy} m</div>
+          {canFill && (
+            <>
+              <button
+                data-testid="gps-btn"
+                onClick={takeGps}
+                disabled={gpsBusy}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold text-sm disabled:opacity-50"
+              >
+                <Crosshair className={`h-4 w-4 ${gpsBusy ? "animate-pulse" : ""}`} /> {gpsBusy ? "Mengambil GPS..." : "Ambil Koordinat GPS"}
+              </button>
+              {hasRef && (
+                <div className="text-[11px] text-slate-500 text-center">
+                  Hasil GPS harus dalam radius {MAX_MOVE_M} m dari titik acuan.
+                </div>
+              )}
+              {accuracy != null && (
+                <div className="text-[11px] text-emerald-600 text-center">Akurasi ±{accuracy} m • koordinat terverifikasi</div>
+              )}
+            </>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Koord X (Bujur)" testid="koord-x" value={koordX} onChange={setKoordX} disabled={!isEditor} />
-            <Field label="Koord Y (Lintang)" testid="koord-y" value={koordY} onChange={setKoordY} disabled={!isEditor} />
+            <Field label="Koord X (Bujur)" testid="koord-x" value={koordX} disabled readOnly placeholder="via GPS" />
+            <Field label="Koord Y (Lintang)" testid="koord-y" value={koordY} disabled readOnly placeholder="via GPS" />
           </div>
         </div>
 
         {/* Navigasi ke lokasi */}
-        {hasCoord() && (
+        {showNav && (
           <div data-testid="nav-card" className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
               <Navigation className="h-4 w-4 text-emerald-600" /> Navigasi ke Lokasi
@@ -195,8 +246,15 @@ export default function MobileDetail({ record, isEditor, online, onBack, onSaved
 
         {/* Pengukuran daun */}
         <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-            <Leaf className="h-4 w-4 text-emerald-600" /> Data Pengukuran Daun
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <Leaf className="h-4 w-4 text-emerald-600" /> Data Pengukuran Daun
+            </div>
+            {canFill && !measUnlocked && (
+              <span data-testid="meas-locked" className="flex items-center gap-1 text-[10px] font-semibold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">
+                <Lock className="h-3 w-3" /> Ambil GPS dulu
+              </span>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             {MEASUREMENT_FIELDS.map((f) => (
@@ -206,23 +264,40 @@ export default function MobileDetail({ record, isEditor, online, onBack, onSaved
                 label={`${f.label}${f.unit ? ` (${f.unit})` : ""}`}
                 value={meas[f.key]}
                 onChange={(v) => setMeas((m) => ({ ...m, [f.key]: v }))}
-                disabled={!isEditor}
+                disabled={!measUnlocked}
               />
             ))}
           </div>
         </div>
 
-        {isEditor && (
-          <button
-            data-testid="save-btn"
-            onClick={handleSave}
-            disabled={saving}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-[#0F291E] text-white font-semibold text-sm shadow-md disabled:opacity-60"
-          >
-            <Save className="h-5 w-5" /> {saving ? "Menyimpan..." : online ? "Simpan Data" : "Simpan (Offline)"}
-          </button>
+        {canFill && (
+          <>
+            <button
+              data-testid="save-btn"
+              onClick={handleSave}
+              disabled={saving || !canSave}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-[#0F291E] text-white font-semibold text-sm shadow-md disabled:opacity-40"
+            >
+              <Save className="h-5 w-5" /> {saving ? "Menyimpan..." : online ? "Simpan Data" : "Simpan (Offline)"}
+            </button>
+            {!canSave && (
+              <div className="text-center text-[11px] text-slate-400 -mt-1">
+                {!gpsDone ? "Ambil koordinat GPS untuk membuka pengisian." : "Lengkapi semua field pengukuran agar bisa menyimpan."}
+              </div>
+            )}
+          </>
         )}
       </div>
+    </div>
+  );
+}
+
+function Step({ done, label, hint }) {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      {done ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Circle className="h-4 w-4 text-slate-300" />}
+      <span className={done ? "text-slate-800" : "text-slate-500"}>{label}</span>
+      <span className={`ml-auto text-[10px] font-semibold ${done ? "text-emerald-600" : "text-slate-400"}`}>{hint}</span>
     </div>
   );
 }
@@ -236,7 +311,7 @@ function Info({ label, value }) {
   );
 }
 
-function Field({ label, value, onChange, disabled, testid }) {
+function Field({ label, value, onChange, disabled, testid, readOnly, placeholder }) {
   return (
     <label className="block">
       <span className="text-[11px] text-slate-500">{label}</span>
@@ -244,9 +319,10 @@ function Field({ label, value, onChange, disabled, testid }) {
         data-testid={testid}
         inputMode="decimal"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         disabled={disabled}
-        placeholder="0"
+        readOnly={readOnly}
+        placeholder={placeholder != null ? placeholder : "0"}
         className="mt-1 w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:bg-slate-50 disabled:text-slate-400"
       />
     </label>

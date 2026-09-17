@@ -24,7 +24,7 @@ export default function MobileScan({ records, onOpen }) {
 
   useEffect(() => () => { stopScanner(); }, []);
 
-  const resolve = async (text) => {
+  const resolve = async (text, fromCamera = false) => {
     const raw = String(text || "").trim();
     if (!raw) return;
     const norm = raw.toLowerCase().replace(/\s/g, "");
@@ -36,8 +36,15 @@ export default function MobileScan({ records, onOpen }) {
     try {
       const res = await api.get("/records/lookup", { params: { q: raw } });
       const list = res.data || [];
-      if (list.length === 1) onOpen(list[0]);
-      else setResults(list);
+      if (fromCamera) {
+        // Hasil scan QR fisik: harus cocok, kalau tidak -> tolak
+        if (list.length >= 1) onOpen(list[0]);
+        else toast.error("QR tidak sesuai lokasi");
+      } else if (list.length === 1) {
+        onOpen(list[0]);
+      } else {
+        setResults(list);
+      }
     } catch (e) {
       toast.error("Gagal mencari data (periksa koneksi)");
     } finally {
@@ -56,7 +63,7 @@ export default function MobileScan({ records, onOpen }) {
         { fps: 10, qrbox: { width: 220, height: 220 } },
         async (decodedText) => {
           await stopScanner();
-          resolve(decodedText);
+          resolve(decodedText, true);
         },
         () => {}
       );

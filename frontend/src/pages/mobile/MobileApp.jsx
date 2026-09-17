@@ -22,6 +22,7 @@ export default function MobileApp() {
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [myToday, setMyToday] = useState(null);
+  const [viaScan, setViaScan] = useState(false);
 
   const isEditor = user && (user.role === "admin" || user.role === "petugas");
 
@@ -81,7 +82,7 @@ export default function MobileApp() {
     };
   }, [runSync]);
 
-  const openDetail = (rec) => { setSelected(rec); setView("detail"); };
+  const openDetail = (rec, fromScan = false) => { setSelected(rec); setViaScan(fromScan); setView("detail"); };
 
   const onSaved = async (savedRecord, queued) => {
     await refreshPending();
@@ -141,15 +142,15 @@ export default function MobileApp() {
             myToday={myToday}
             userName={user?.name}
             onRefresh={fetchRecords}
-            onOpen={openDetail}
+            onOpen={(rec) => openDetail(rec, false)}
             onGoScan={() => setView("scan")}
           />
         )}
         {view === "scan" && (
-          <MobileScan records={records} onOpen={openDetail} />
+          <MobileScan records={records} onOpen={(rec) => openDetail(rec, true)} />
         )}
         {view === "map" && (
-          <MobileMap records={records} onOpen={openDetail} />
+          <MobileMap records={records} onOpen={(rec) => openDetail(rec, false)} />
         )}
         {view === "profile" && (
           <MobileProfile
@@ -165,6 +166,7 @@ export default function MobileApp() {
             record={selected}
             isEditor={isEditor}
             online={online}
+            viaScan={viaScan}
             onBack={() => { setView("home"); setSelected(null); }}
             onSaved={onSaved}
           />
