@@ -10,7 +10,7 @@ Cleanup via POST /api/records/delete-bulk dengan id uji saja.
 import requests
 import sys
 
-BASE_URL = "https://nasrul-epcs-1.preview.emergentagent.com/api"
+BASE_URL = "https://epcs-nasrul-1.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@eqms.id"
 ADMIN_PASSWORD = "EQMS1234"
 
