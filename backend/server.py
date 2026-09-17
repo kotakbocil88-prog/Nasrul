@@ -203,6 +203,14 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     return user
 
 
+async def require_editor(user: dict = Depends(get_current_user)) -> dict:
+    """Admin & Petugas boleh memperbarui data (tagging koordinat & pengukuran).
+    Petugas TIDAK boleh menambah/menghapus/import."""
+    if user.get("role") not in ("admin", "petugas"):
+        raise HTTPException(status_code=403, detail="Akses ditolak: hanya admin/petugas yang dapat memperbarui data")
+    return user
+
+
 # ---------------------------------------------------------------- QR helpers
 def fmt_num(v) -> str:
     """Format koordinat memakai koma sebagai pemisah desimal (format Indonesia).
@@ -425,6 +433,49 @@ async def stats(user: dict = Depends(get_current_user)):
             "total_lsu": len([l for l in lsu if l])}
 
 
+@api_router.get("/records/lookup")
+async def lookup_record(q: str = "", user: dict = Depends(get_current_user)):
+    """Cari data untuk fitur Scan QR / pencarian cepat di mobile.
+    Mencocokkan Id Actual (computed), payload QR, atau kombinasi kebun/blok/lsu/titik sample."""
+    query = (q or "").strip()
+    if not query:
+        return []
+    norm = query.lower().replace(" ", "")
+    docs = await db.records.find().to_list(200000)
+    exact, partial = [], []
+    for d in docs:
+        sd = serialize(d)
+        idv = str(sd.get("id_actual", "")).lower().replace(" ", "")
+        payload = str(sd.get("payload", "")).lower().replace(" ", "")
+        haystack = "".join(str(sd.get(k, "")) for k in
+                           ("kebun", "afdeling", "blok", "code_lsu", "titik_sample")).lower().replace(" ", "")
+        if idv and idv == norm:
+            exact.append(sd)
+        elif norm in idv or norm in payload or norm in haystack:
+            partial.append(sd)
+    results = exact + partial
+    return results[:50]
+
+
+@api_router.get("/records/my-tagging-summary")
+async def my_tagging_summary(user: dict = Depends(get_current_user)):
+    """Ringkasan tagging oleh pengguna saat ini (motivasi harian).
+    'today' dihitung berdasarkan zona waktu WIB (UTC+7)."""
+    email = user.get("email", "")
+    now_utc = datetime.now(timezone.utc)
+    wib_now = now_utc + timedelta(hours=7)
+    wib_start = wib_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_utc = wib_start - timedelta(hours=7)
+    start_iso = start_utc.isoformat()
+    docs = await db.records.find({"last_tagged_by": email}).to_list(200000)
+    today = 0
+    for d in docs:
+        ts = str(d.get("last_tagged_at", ""))
+        if ts and ts >= start_iso:
+            today += 1
+    return {"today": today, "total": len(docs), "email": email}
+
+
 @api_router.post("/records")
 async def create_record(body: RecordInput, user: dict = Depends(require_admin)):
     doc = body.model_dump()
@@ -439,7 +490,7 @@ async def create_record(body: RecordInput, user: dict = Depends(require_admin)):
 
 
 @api_router.put("/records/{rid}")
-async def update_record(rid: str, body: RecordInput, user: dict = Depends(require_admin)):
+async def update_record(rid: str, body: RecordInput, user: dict = Depends(require_editor)):
     existing = await db.records.find_one({"_id": ObjectId(rid)})
     if not existing:
         raise HTTPException(status_code=404, detail="Data tidak ditemukan")
@@ -452,6 +503,10 @@ async def update_record(rid: str, body: RecordInput, user: dict = Depends(requir
         update["$set"]["tagged_at"] = datetime.now(timezone.utc).isoformat()
     elif not now_tagged and existing.get("tagged_at"):
         update["$unset"] = {"tagged_at": ""}
+    # Catat siapa & kapan tagging terakhir (untuk ringkasan harian petugas)
+    if now_tagged:
+        update["$set"]["last_tagged_by"] = user.get("email", "")
+        update["$set"]["last_tagged_at"] = datetime.now(timezone.utc).isoformat()
     await db.records.update_one({"_id": ObjectId(rid)}, update)
     saved = await db.records.find_one({"_id": ObjectId(rid)})
     return serialize(saved)
@@ -1014,6 +1069,26 @@ async def startup():
             updates["role"] = "viewer"
         if updates:
             await db.users.update_one({"email": viewer_email}, {"$set": updates})
+
+
+    # Seed petugas lapangan (boleh update tagging via mobile, tidak boleh tambah/hapus/import)
+    petugas_email = os.environ.get("PETUGAS_EMAIL", "petugas@eqms.id").lower()
+    petugas_pw = os.environ.get("PETUGAS_PASSWORD", "PETUGAS1234")
+    petugas_existing = await db.users.find_one({"email": petugas_email})
+    if petugas_existing is None:
+        await db.users.insert_one({
+            "email": petugas_email, "password_hash": hash_password(petugas_pw),
+            "name": "Petugas Lapangan", "role": "petugas",
+            "created_at": datetime.now(timezone.utc).isoformat()})
+        logger.info("Petugas seeded")
+    else:
+        updates = {}
+        if not verify_password(petugas_pw, petugas_existing["password_hash"]):
+            updates["password_hash"] = hash_password(petugas_pw)
+        if petugas_existing.get("role") != "petugas":
+            updates["role"] = "petugas"
+        if updates:
+            await db.users.update_one({"email": petugas_email}, {"$set": updates})
 
 
 @app.on_event("shutdown")

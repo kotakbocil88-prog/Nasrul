@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
+import MobileApp from "@/pages/mobile/MobileApp";
 import PwaControls from "@/components/PwaControls";
 
 function ProtectedRoute({ children }) {
@@ -19,6 +20,13 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+function HomeRoute() {
+  const { user } = useAuth();
+  // Petugas lapangan langsung diarahkan ke aplikasi mobile (pengambilan data)
+  if (user && user.role === "petugas") return <Navigate to="/m" replace />;
+  return <Dashboard />;
+}
+
 function App() {
   return (
     <div className="App">
@@ -30,7 +38,15 @@ function App() {
               path="/"
               element={
                 <ProtectedRoute>
-                  <Dashboard />
+                  <HomeRoute />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/m"
+              element={
+                <ProtectedRoute>
+                  <MobileApp />
                 </ProtectedRoute>
               }
             />
